@@ -18,25 +18,26 @@ layout(std430, binding = 2) buffer Debug {
 	float data[];
 } debug;
 
-shared float sdata[512];
+shared float shared_exp_data[512];
+shared float shared_sum_data[512];
 
 void main () {
 	const uint global_index = gl_GlobalInvocationID.x;
 	const uint local_index = gl_LocalInvocationID.x;
 	// const uint group_size = gl_WorkGroupSize.x;
     
-	data.data[global_index] = exp(data.data[global_index]);
-    sdata[global_index] = data.data[global_index];
+	shared_exp_data[global_index] = exp(data.data[global_index]);
+  shared_sum_data[global_index] = shared_exp_data[global_index];
   
-    // Parallel reduction
+  // Parallel reduction - TODO - fix for cases where workgroup size < total size
 	for (uint stride = 1; stride < gl_WorkGroupSize.x; stride *= 2) {
 		uint index = 2 * stride * local_index;
 		if (index + stride < gl_WorkGroupSize.x) {
-			sdata[index] += sdata[index + stride];
+			shared_sum_data[index] += shared_sum_data[index + stride];
 		}
 		memoryBarrierShared();
 	}
 
-    data_out.data[global_index] = data.data[global_index] / sdata[0];
+  data_out.data[global_index] = shared_exp_data[global_index] / shared_sum_data[0];
 
 }

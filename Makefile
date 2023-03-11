@@ -49,3 +49,6 @@ watch-linux: .PHONY build/softmax.spv
 clean: .PHONY
 	rm -rf conan
 	rm -rf build
+
+clformat:
+	clang-format -i src/*.cpp src/*.hpp

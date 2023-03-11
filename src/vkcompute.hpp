@@ -7,9 +7,6 @@ void check(VkResult &result, const char *message) {
   if (result != VK_SUCCESS) {
     spdlog::error("Failed to execute: {}", message);
     spdlog::error("Error code: {}", result);
-    if (result == VK_ERROR_OUT_OF_HOST_MEMORY) {
-      spdlog::error("VK_ERROR_OUT_OF_HOST_MEMORY");
-    }
     exit(1);
   } else {
     spdlog::info("Success: {}", message);
@@ -249,10 +246,7 @@ VkDeviceMemory bind_buffer(VkDevice &device, VkBuffer &buffer, int memory_type,
   spdlog::info("Memory requirements size: {}", memoryRequirements.size);
   VkResult result =
       vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &memory);
-  if (result != VK_SUCCESS) {
-    std::cerr << "Failed to allocate memory : " << result << std::endl;
-    exit(1);
-  }
+  check(result, "Allocate GPU memory");
   // bind memory to buffers
   vkBindBufferMemory(device, buffer, memory, 0);
   spdlog::info("Memory bound to buffers successfully");
@@ -468,67 +462,7 @@ mk_descriptor_set(VkDevice &device, VkDescriptorPool &pool,
   allocInfo.pSetLayouts = layouts.data();
   VkResult result =
       vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
-  if (result != VK_SUCCESS) {
-    spdlog::error("Failed to allocate descriptor set: {}", result);
-    // details of the error
-    switch (result) {
-    case VK_ERROR_OUT_OF_HOST_MEMORY:
-      spdlog::error("VK_ERROR_OUT_OF_HOST_MEMORY");
-      break;
-    case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-      spdlog::error("VK_ERROR_OUT_OF_DEVICE_MEMORY");
-      break;
-    case VK_ERROR_FRAGMENTED_POOL:
-      spdlog::error("VK_ERROR_FRAGMENTED_POOL");
-      break;
-    case VK_ERROR_OUT_OF_POOL_MEMORY:
-      spdlog::error("VK_ERROR_OUT_OF_POOL_MEMORY");
-      break;
-    case VK_ERROR_INVALID_EXTERNAL_HANDLE:
-      spdlog::error("VK_ERROR_INVALID_EXTERNAL_HANDLE");
-      break;
-    case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS:
-      spdlog::error("VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS");
-      break;
-    case VK_ERROR_SURFACE_LOST_KHR:
-      spdlog::error("VK_ERROR_SURFACE_LOST_KHR");
-      break;
-    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
-      spdlog::error("VK_ERROR_NATIVE_WINDOW_IN_USE_KHR");
-      break;
-    case VK_ERROR_OUT_OF_DATE_KHR:
-      spdlog::error("VK_ERROR_OUT_OF_DATE_KHR");
-      break;
-    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
-      spdlog::error("VK_ERROR_INCOMPATIBLE_DISPLAY_KHR");
-      break;
-    case VK_ERROR_VALIDATION_FAILED_EXT:
-      spdlog::error("VK_ERROR_VALIDATION_FAILED_EXT");
-      break;
-    case VK_ERROR_INVALID_SHADER_NV:
-      spdlog::error("VK_ERROR_INVALID_SHADER_NV");
-      break;
-    case VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT:
-      spdlog::error("VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT");
-      break;
-    case VK_ERROR_FRAGMENTATION_EXT:
-      spdlog::error("VK_ERROR_FRAGMENTATION_EXT");
-      break;
-    case VK_ERROR_NOT_PERMITTED_EXT:
-      spdlog::error("VK_ERROR_NOT_PERMITTED_EXT");
-      break;
-    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
-      spdlog::error("VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT");
-      break;
-    // done with the error details
-    default:
-      spdlog::error("Unknown error");
-      break;
-    }
-
-    exit(1);
-  }
-  spdlog::info("Descriptor set allocated successfully");
+  check(result, "Descriptor set allocation.");
   return descriptorSet;
 }
 
