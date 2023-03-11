@@ -1,0 +1,10 @@
+[requires]
+fmt/9.1.0
+spdlog/1.11.0
+vulkan-headers/1.3.236.0
+vulkan-loader/1.3.236.0
+glslang/8.13.3559
+
+[generators]
+CMakeDeps
+CMakeToolchain
