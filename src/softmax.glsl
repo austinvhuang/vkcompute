@@ -8,7 +8,7 @@ layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z_id = 2) in;
 // array input
 layout(std430, binding = 0) buffer Data {
 	float data[];
-} data;
+} data_in;
 
 layout(std430, binding = 1) buffer Out {
 	float data[];
@@ -26,7 +26,7 @@ void main () {
 	const uint local_index = gl_LocalInvocationID.x;
 	// const uint group_size = gl_WorkGroupSize.x;
     
-	shared_exp_data[global_index] = exp(data.data[global_index]);
+	shared_exp_data[global_index] = exp(data_in.data[global_index]);
   shared_sum_data[global_index] = shared_exp_data[global_index];
   
   // Parallel reduction - TODO - fix for cases where workgroup size < total size
