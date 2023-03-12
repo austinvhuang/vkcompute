@@ -45,7 +45,7 @@ int main() {
    * and device memory handles for associated GPU memory.
    */
 
-  constexpr int size = 50;
+  constexpr int size = 16;
   std::array<float, size> input_a = {};
   for (int i = 0; i < size; i++) {
     input_a[i] = static_cast<float>(i);
@@ -111,8 +111,8 @@ int main() {
   spdlog::info("descriptorWrites.size(): {}", descriptorWrites.size());
   vkUpdateDescriptorSets(device, n_bindings, descriptorWrites.data(), 0,
                          nullptr);
-  uint32_t wgsize = output.size();
-  // uint32_t wgsize = 8; // TODO: fix computation for wgsize < input size
+  // uint32_t wgsize = output.size();
+  uint32_t wgsize = output.size() / 2;
   const std::array<uint32_t, 3> workgroup_size = {static_cast<uint32_t>(wgsize),
                                                   1, 1};
   VkPipeline pipeline =
@@ -171,6 +171,7 @@ int main() {
     for (auto &x : input_a) {
       spdlog::info("  {}", x);
     }
+    /*
     spdlog::info("Debug: ");
     int idx = 0;
     for (auto &x : debug) {
@@ -180,13 +181,15 @@ int main() {
       }
       idx++;
     }
+    */
     spdlog::info("Output: ");
     for (auto &x : output) {
       spdlog::info("  {}", x);
     }
     // get keyboard input
     std::cout << "Enter q to quit, anything else to re-run computation > ";
-    std::getline(std::cin, input);
+    // std::getline(std::cin, input);
+    input = "q"; // only run once
   }
   spdlog::info("Done");
 }

@@ -19,25 +19,36 @@ layout(std430, binding = 2) buffer Debug {
 } debug;
 
 shared float shared_exp_data[512];
-shared float shared_sum_data[512];
+shared float partial_sums[512];
 
 void main () {
-	const uint global_index = gl_GlobalInvocationID.x;
-	const uint local_index = gl_LocalInvocationID.x;
-	// const uint group_size = gl_WorkGroupSize.x;
+  const uint global_idx = gl_GlobalInvocationID.x;
+  const uint local_idx = gl_LocalInvocationID.x;
+  const uint workgroup_idx = gl_WorkGroupID.x;
+  const uint n_workgroups = gl_NumWorkGroups.x;
+  const uint workgroup_size = gl_WorkGroupSize.x;
     
-	shared_exp_data[global_index] = exp(data_in.data[global_index]);
-  shared_sum_data[global_index] = shared_exp_data[global_index];
-  
-  // Parallel reduction - TODO - fix for cases where workgroup size < total size
-	for (uint stride = 1; stride < gl_WorkGroupSize.x; stride *= 2) {
-		uint index = 2 * stride * local_index;
-		if (index + stride < gl_WorkGroupSize.x) {
-			shared_sum_data[index] += shared_sum_data[index + stride];
-		}
-		memoryBarrierShared();
-	}
+  shared_exp_data[global_idx] = exp(data_in.data[global_idx]);
+  partial_sums[local_idx] = shared_exp_data[global_idx]
+  float value = shared_exp_data[global_idx];
 
-  data_out.data[global_index] = shared_exp_data[global_index] / shared_sum_data[0];
+  for (uint stride = 1; stride <= gl_WorkGroupSize.x; stride *= 2) {
+      barrier();
+      uint index = (local_idx + 1) * stride * 2 - 1;
+      if (index < gl_WorkGroupSize.x) {
+          partial_sums[index] += partial_sums[index - stride];
+      }
+  }
 
+  barrier();
+
+  for (uint stride = gl_WorkGroupSize.x / 2; stride > 0; stride /= 2) {
+      barrier(); // Ensure all threads have computed partial sums
+      if (local_idx < stride) {
+          partial_sums[local_idx] += partial_sums[local_idx + stride];
+      }
+  }
+  const float total = partial_sums[0];
+
+  data_out.data[global_idx] = shared_exp_data[global_idx] / total;
 }
