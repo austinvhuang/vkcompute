@@ -1,11 +1,10 @@
 #version 450
 
-// TODO - enable in vulkan
-#extension GL_EXT_debug_printf : enable
+// #extension GL_EXT_debug_printf : enable
+// #extension GL_EXT_shader_atomic_float : enable
 
 layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z_id = 2) in;
 
-// array input
 layout(std430, binding = 0) buffer Data {
 	float data[];
 } data_in;
@@ -14,11 +13,7 @@ layout(std430, binding = 1) buffer Out {
 	float data[];
 } data_out;
 
-layout(std430, binding = 2) buffer Debug {
-	float data[];
-} debug;
-
-shared float shared_exp_data[512];
+shared float exp_data[512];
 shared float partial_sums[512];
 
 void main () {
@@ -28,27 +23,15 @@ void main () {
   const uint n_workgroups = gl_NumWorkGroups.x;
   const uint workgroup_size = gl_WorkGroupSize.x;
     
-  shared_exp_data[global_idx] = exp(data_in.data[global_idx]);
-  partial_sums[local_idx] = shared_exp_data[global_idx]
-  float value = shared_exp_data[global_idx];
+  exp_data[global_idx] = exp(data_in.data[global_idx]);
+  partial_sums[global_idx] = exp_data[global_idx];
 
-  for (uint stride = 1; stride <= gl_WorkGroupSize.x; stride *= 2) {
+  for (uint stride = 1; stride < workgroup_size; stride *= 2) {
       barrier();
-      uint index = (local_idx + 1) * stride * 2 - 1;
-      if (index < gl_WorkGroupSize.x) {
-          partial_sums[index] += partial_sums[index - stride];
+      if (local_idx % (2 * stride) == 0 && local_idx + stride < workgroup_size) {
+        partial_sums[global_idx] = partial_sums[global_idx] + partial_sums[global_idx + stride];
       }
   }
 
-  barrier();
-
-  for (uint stride = gl_WorkGroupSize.x / 2; stride > 0; stride /= 2) {
-      barrier(); // Ensure all threads have computed partial sums
-      if (local_idx < stride) {
-          partial_sums[local_idx] += partial_sums[local_idx + stride];
-      }
-  }
-  const float total = partial_sums[0];
-
-  data_out.data[global_idx] = shared_exp_data[global_idx] / total;
+  data_out.data[global_idx] = exp_data[global_idx] / partial_sums[0];
 }

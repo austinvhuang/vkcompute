@@ -52,10 +52,6 @@ int main() {
   }
   std::array<float, size> output = {};
 
-  constexpr int debug_buffer_size = 16;
-  // initialize to 0
-  std::array<float, debug_buffer_size> debug = {};
-
   VkBuffer buffer_in = mk_buffer(input_a.size(), device,
                                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -64,11 +60,6 @@ int main() {
                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                       VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-
-  VkBuffer buffer_debug = mk_buffer(debug.size(), device,
-                                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                        VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                        VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
   auto memory_type = query_memory_type(physical_device);
   if (!memory_type) {
@@ -79,18 +70,15 @@ int main() {
       bind_buffer(device, buffer_in, memory_type.value(), input_a.size());
   VkDeviceMemory memory_out =
       bind_buffer(device, buffer_out, memory_type.value(), output.size());
-  VkDeviceMemory memory_debug =
-      bind_buffer(device, buffer_debug, memory_type.value(), debug.size());
   copy_to_gpu<size>(device, memory_in, input_a);
   copy_to_gpu<size>(device, memory_out, output);
-  copy_to_gpu<debug_buffer_size>(device, memory_debug, debug);
 
   /*
    * Create shader module and pipeline for computation.
    */
 
   VkShaderModule shader = mk_shader(device, "../build/softmax.spv");
-  constexpr int n_bindings = 3;
+  constexpr int n_bindings = 2;
   VkPipelineLayout pipeline_layout = mk_pipeline_layout<n_bindings>(device);
   VkDescriptorSetLayout descriptor_set_layout =
       mk_descriptor_set_layout<n_bindings>(device);
@@ -101,18 +89,14 @@ int main() {
       mk_descriptor_set(device, descriptor_pool, descriptor_set_layouts);
   VkDescriptorBufferInfo bufferinfo_in = mk_descriptor_buffer_info(buffer_in);
   VkDescriptorBufferInfo bufferinfo_out = mk_descriptor_buffer_info(buffer_out);
-  VkDescriptorBufferInfo bufferinfo_debug =
-      mk_descriptor_buffer_info(buffer_debug);
   std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites =
       mk_descriptor_writes<n_bindings>(descriptor_set);
   descriptorWrites[0].pBufferInfo = &bufferinfo_in;
   descriptorWrites[1].pBufferInfo = &bufferinfo_out;
-  descriptorWrites[2].pBufferInfo = &bufferinfo_debug;
   spdlog::info("descriptorWrites.size(): {}", descriptorWrites.size());
   vkUpdateDescriptorSets(device, n_bindings, descriptorWrites.data(), 0,
                          nullptr);
-  // uint32_t wgsize = output.size();
-  uint32_t wgsize = output.size() / 2;
+  uint32_t wgsize = output.size();
   const std::array<uint32_t, 3> workgroup_size = {static_cast<uint32_t>(wgsize),
                                                   1, 1};
   VkPipeline pipeline =
@@ -128,6 +112,7 @@ int main() {
   VkCommandBufferBeginInfo beginInfo = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       // allow command buffer to be executed multiple times
+      // -
       .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
   };
   VkResult result = vkBeginCommandBuffer(command_buffer, &beginInfo);
@@ -166,30 +151,21 @@ int main() {
 
     copy_to_cpu<size>(device, memory_in, input_a);
     copy_to_cpu<size>(device, memory_out, output);
-    copy_to_cpu<debug_buffer_size>(device, memory_debug, debug);
     spdlog::info("Input: ");
-    for (auto &x : input_a) {
-      spdlog::info("  {}", x);
-    }
-    /*
-    spdlog::info("Debug: ");
     int idx = 0;
-    for (auto &x : debug) {
-      spdlog::info("  {}", x);
-      if (idx % 4 == 3) {
-        spdlog::info(" --- ");
-      }
+    for (auto &x : input_a) {
+      spdlog::info("{} : {}", idx, x);
       idx++;
     }
-    */
     spdlog::info("Output: ");
+    idx = 0;
     for (auto &x : output) {
-      spdlog::info("  {}", x);
+      spdlog::info("{} : {}", idx, x);
+      idx++;
     }
     // get keyboard input
     std::cout << "Enter q to quit, anything else to re-run computation > ";
-    // std::getline(std::cin, input);
-    input = "q"; // only run once
+    std::getline(std::cin, input);
   }
   spdlog::info("Done");
 }
