@@ -42,13 +42,11 @@ mk_vulkan_instance(std::array<char *, n_layers> &validation_layer_names) {
   {
     auto extensions = vk::enumerateInstanceExtensionProperties();
     bool extensionFound = false;
-    spdlog::info("Available extensions:");
     for (const auto &extension : extensions) {
-      spdlog::info("\t{}", extension.extensionName);
       if (strcmp(extension.extensionName,
                  VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
         extensionFound = true;
-        // break;
+        break;
       }
     }
     if (!extensionFound) {
@@ -95,7 +93,7 @@ VkPhysicalDevice mk_physcal_device(VkInstance &instance) {
   uint32_t deviceCount = 0;
   vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
   if (deviceCount == 0) {
-    throw std::runtime_error("failed to find GPUs with Vulkan support!");
+    throw std::runtime_error("Failed to find GPUs with Vulkan support.");
   }
   std::vector<VkPhysicalDevice> devices(deviceCount);
   vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
@@ -382,11 +380,7 @@ VkDescriptorPool mk_descriptor_pool(VkDevice &device) {
   poolInfo.maxSets = 1;
   VkResult result =
       vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool);
-  if (result != VK_SUCCESS) {
-    spdlog::error("Failed to create descriptor pool: {}", result);
-    exit(1);
-  }
-  spdlog::info("Descriptor pool created successfully");
+  check(result, "Descriptor pool creation.");
   return descriptorPool;
 }
 
@@ -412,11 +406,9 @@ VkPipeline mk_pipeline(VkDevice &device, VkPipelineLayout &pipelineLayout,
           .size = sizeof(uint32_t),
       },
   };
-
   // print workgroup size
   spdlog::info("Workgroup size: {} {} {}", workgroup_size[0], workgroup_size[1],
                workgroup_size[2]);
-
   VkSpecializationInfo specialization_info = {
       .mapEntryCount = 3,
       .pMapEntries = map_entries,
