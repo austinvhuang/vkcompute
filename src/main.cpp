@@ -77,7 +77,7 @@ int main() {
    * Create shader module and pipeline for computation.
    */
 
-  VkShaderModule shader = mk_shader(device, "../build/softmax.spv");
+  VkShaderModule shader = mk_shader(device, "build/softmax.spv");
   constexpr int n_bindings = 2;
   VkPipelineLayout pipeline_layout = mk_pipeline_layout<n_bindings>(device);
   VkDescriptorSetLayout descriptor_set_layout =

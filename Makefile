@@ -38,13 +38,13 @@ watch-shaders:
 	rg --files | entr -s "make build/softmax.spv && echo 'Compiled shader'"
 
 make run-osx: build-osx build/softmax.spv
-	cd build && ./vkcompute
+	./build/vkcompute
 
 watch-osx: .PHONY build/softmax.spv
-	rg -t cpp -t txt --files | entr -s "clang-format -i src/*.cpp src/*.hpp && make build-osx && cd build && ./vkcompute"
+	rg -t cpp -t txt --files | entr -s "clang-format -i src/*.cpp src/*.hpp && make build-osx && ./build/vkcompute"
 
 watch-linux: .PHONY build/softmax.spv
-	rg -t cpp -t txt --files | entr -s "clang-format -i src/*.cpp src/*.hpp && make build-linux && cd build && ./vkcompute"
+	rg -t cpp -t txt --files | entr -s "clang-format -i src/*.cpp src/*.hpp && make build-linux && ./build/vkcompute"
 
 clean: .PHONY
 	rm -rf conan
