@@ -259,11 +259,13 @@ VkDeviceMemory bind_buffer(VkDevice &device, VkBuffer &buffer, int memory_type,
   return memory;
 }
 
-template <int size>
+template <size_t size>
 void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
                  const std::array<float, size> &input) {
   void *data;
-  vkMapMemory(device, memory, 0, sizeof(float) * input.size(), 0, &data);
+  VkResult result =
+      vkMapMemory(device, memory, 0, sizeof(float) * input.size(), 0, &data);
+  check(result, "Map to GPU memory");
   memcpy(data, input.data(), sizeof(float) * input.size());
   vkUnmapMemory(device, memory);
   spdlog::info("Memory copied successfully");
@@ -272,6 +274,7 @@ void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
 VkShaderModule mk_shader(VkDevice &device, const std::string &shader_file) {
   // Read shader file
   std::ifstream file(shader_file, std::ios::ate | std::ios::binary);
+
   if (!file.is_open()) {
     throw std::runtime_error("Failed to open shader file: " + shader_file);
   }
@@ -292,92 +295,103 @@ VkShaderModule mk_shader(VkDevice &device, const std::string &shader_file) {
   VkShaderModule shader_module;
   VkResult result =
       vkCreateShaderModule(device, &create_info, nullptr, &shader_module);
-  check(result, "Shader module creation.");
+
+  check(result, "Create shader module");
   return shader_module;
 }
 
-template <const int n_bindings>
+template <size_t n_bindings>
 VkPipelineLayout mk_pipeline_layout(VkDevice &device) {
-  VkPipelineLayout pipelineLayout = {};
-  VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-  pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  VkPipelineLayout pipelineLayout{};
+  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   // add the descriptor set layout
-  VkDescriptorSetLayout descriptor_set_layout = {};
-  VkDescriptorSetLayoutBinding uboLayoutBinding[n_bindings] = {};
-  // create descriptor set layout for a comput4e shader pipeline
-  for (auto idx = 0; idx < n_bindings; ++idx) {
-    uboLayoutBinding[idx].binding = idx;
-    uboLayoutBinding[idx].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    uboLayoutBinding[idx].descriptorCount = 1;
-    uboLayoutBinding[idx].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    uboLayoutBinding[idx].pImmutableSamplers = nullptr; // Optional
-  }
-  VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-  layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutInfo.bindingCount = n_bindings;
-  layoutInfo.pBindings = uboLayoutBinding;
-  if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr,
-                                  &descriptor_set_layout) != VK_SUCCESS) {
-    spdlog::error("Failed to create descriptor set layout");
-    exit(1);
-  }
-  pipelineLayoutInfo.setLayoutCount = 1; // number of descriptor set
-  pipelineLayoutInfo.pSetLayouts = &descriptor_set_layout;
-  VkResult result = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                           &pipelineLayout);
-  check(result, "Pipeline layout creation.");
-  return pipelineLayout;
-}
+  VkDescriptorSetLayout descriptor_set_layout{};
+  std::array<VkDescriptorSetLayoutBinding, n_bindings> uboLayoutBindings{};
 
-template <int n_bindings>
-VkDescriptorSetLayout mk_descriptor_set_layout(VkDevice &device) {
-  VkDescriptorSetLayout descriptorSetLayout = {};
-  // bind 3 buffers to the compute shader, 2 inputs, 1 output
-  VkDescriptorSetLayoutBinding uboLayoutBinding[n_bindings] = {};
   // create descriptor set layout for a compute shader pipeline
-  for (uint32_t idx = 0; idx < n_bindings; ++idx) {
-    uboLayoutBinding[idx] = {
-        .binding = idx,
+  for (size_t idx = 0; idx < n_bindings; ++idx) {
+    uboLayoutBindings[idx] = {
+        .binding = static_cast<uint32_t>(idx),
         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
         .pImmutableSamplers = nullptr // Optional
     };
   }
-  // uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
-  VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-  layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutInfo.bindingCount = n_bindings;
-  layoutInfo.pBindings = uboLayoutBinding;
+
+  VkDescriptorSetLayoutCreateInfo layoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(n_bindings),
+      .pBindings = uboLayoutBindings.data()};
+
+  if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr,
+                                  &descriptor_set_layout) != VK_SUCCESS) {
+    throw std::runtime_error("Failed to create descriptor set layout.");
+  }
+
+  pipelineLayoutInfo.setLayoutCount = 1; // number of descriptor set
+  pipelineLayoutInfo.pSetLayouts = &descriptor_set_layout;
+  VkResult result = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+                                           &pipelineLayout);
+
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("Failed to create pipeline layout.");
+  }
+
+  return pipelineLayout;
+}
+
+template <size_t n_bindings>
+VkDescriptorSetLayout create_descriptor_set_layout(VkDevice &device) {
+  std::array<VkDescriptorSetLayoutBinding, n_bindings> uboLayoutBindings{};
+
+  for (uint32_t idx = 0; idx < n_bindings; ++idx) {
+    uboLayoutBindings[idx] = {.binding = idx,
+                              .descriptorType =
+                                  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                              .descriptorCount = 1,
+                              .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                              .pImmutableSamplers = nullptr};
+  }
+
+  VkDescriptorSetLayoutCreateInfo layoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(n_bindings),
+      .pBindings = uboLayoutBindings.data()};
+
+  VkDescriptorSetLayout descriptorSetLayout{};
   VkResult result = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr,
                                                 &descriptorSetLayout);
-  check(result, "Descriptor set layout.");
+  check(result, "Descriptor set layout creation.");
+
   return descriptorSetLayout;
 }
 
-VkDescriptorBufferInfo mk_descriptor_buffer_info(VkBuffer &buffer) {
-  VkDescriptorBufferInfo bufferInfo = {};
-  bufferInfo.buffer = buffer;
-  bufferInfo.offset = 0;
-  bufferInfo.range = VK_WHOLE_SIZE;
+VkDescriptorBufferInfo create_descriptor_buffer_info(VkBuffer &buffer) {
+  VkDescriptorBufferInfo bufferInfo{
+      .buffer = buffer, .offset = 0, .range = VK_WHOLE_SIZE};
+
   return bufferInfo;
 }
 
-template <int n_bindings>
+template <size_t n_bindings>
 std::array<VkWriteDescriptorSet, n_bindings>
-mk_descriptor_writes(VkDescriptorSet &descriptorSet) {
-  std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites = {};
-  for (auto idx = 0; idx < n_bindings; ++idx) {
-    descriptorWrites[idx] = {};
-    descriptorWrites[idx].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[idx].dstSet = descriptorSet;
-    descriptorWrites[idx].dstBinding = idx;
-    descriptorWrites[idx].dstArrayElement = 0;
-    descriptorWrites[idx].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorWrites[idx].descriptorCount = 1;
-    descriptorWrites[idx].pImageInfo = nullptr;       // Optional
-    descriptorWrites[idx].pTexelBufferView = nullptr; // Optional
+create_descriptor_writes(VkDescriptorSet &descriptorSet) {
+  std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites{};
+
+  for (size_t idx = 0; idx < n_bindings; ++idx) {
+    descriptorWrites[idx] = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                             .dstSet = descriptorSet,
+                             .dstBinding = static_cast<uint32_t>(idx),
+                             .dstArrayElement = 0,
+                             .descriptorType =
+                                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                             .descriptorCount = 1,
+                             .pImageInfo = nullptr,
+                             .pTexelBufferView = nullptr};
   }
+
   return descriptorWrites;
 }
 

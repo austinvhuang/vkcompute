@@ -81,16 +81,18 @@ int main() {
   constexpr int n_bindings = 2;
   VkPipelineLayout pipeline_layout = mk_pipeline_layout<n_bindings>(device);
   VkDescriptorSetLayout descriptor_set_layout =
-      mk_descriptor_set_layout<n_bindings>(device);
+      create_descriptor_set_layout<n_bindings>(device);
   std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts = {
       descriptor_set_layout};
   VkDescriptorPool descriptor_pool = mk_descriptor_pool(device);
   VkDescriptorSet descriptor_set =
       mk_descriptor_set(device, descriptor_pool, descriptor_set_layouts);
-  VkDescriptorBufferInfo bufferinfo_in = mk_descriptor_buffer_info(buffer_in);
-  VkDescriptorBufferInfo bufferinfo_out = mk_descriptor_buffer_info(buffer_out);
+  VkDescriptorBufferInfo bufferinfo_in =
+      create_descriptor_buffer_info(buffer_in);
+  VkDescriptorBufferInfo bufferinfo_out =
+      create_descriptor_buffer_info(buffer_out);
   std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites =
-      mk_descriptor_writes<n_bindings>(descriptor_set);
+      create_descriptor_writes<n_bindings>(descriptor_set);
   descriptorWrites[0].pBufferInfo = &bufferinfo_in;
   descriptorWrites[1].pBufferInfo = &bufferinfo_out;
   spdlog::info("descriptorWrites.size(): {}", descriptorWrites.size());
