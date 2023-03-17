@@ -88,165 +88,173 @@ mk_vulkan_instance(std::array<char *, n_layers> &validation_layer_names) {
   return instance;
 }
 
-VkPhysicalDevice mk_physcal_device(VkInstance &instance) {
-  vk::PhysicalDevice physicalDevice = VK_NULL_HANDLE;
-  uint32_t deviceCount = 0;
-  vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-  if (deviceCount == 0) {
+VkPhysicalDevice select_physical_device(VkInstance &instance) {
+  uint32_t device_count = 0;
+  vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
+
+  if (device_count == 0) {
     throw std::runtime_error("Failed to find GPUs with Vulkan support.");
   }
-  std::vector<VkPhysicalDevice> devices(deviceCount);
-  vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-  int idx = 0;
-  for (const auto &device : devices) {
-    spdlog::info("Device Found Index {}", idx);
-    ++idx;
+
+  std::vector<VkPhysicalDevice> devices(device_count);
+  vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+
+  // Log devices found
+  for (size_t i = 0; i < devices.size(); ++i) {
+    spdlog::info("Device Found Index {}", i);
   }
-  assert(devices.size() > 0); // should be satisfied if deviceCount > 0
+
   // TODO - pick a device based on suitability criterion
-  physicalDevice = devices[0];
-  spdlog::info("Physical device count: {}", deviceCount);
+  // For now, just pick the first available device
+  VkPhysicalDevice selected_device = devices[0];
+
+  // Log selected device properties
   VkPhysicalDeviceProperties properties;
-  vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-  spdlog::info("Device name: {}", properties.deviceName);
+  vkGetPhysicalDeviceProperties(selected_device, &properties);
+
+  spdlog::info("Physical device count: {}", device_count);
+  spdlog::info("Selected device name: {}", properties.deviceName);
   spdlog::info("Max workgroup count x: {}",
                properties.limits.maxComputeWorkGroupCount[0]);
   spdlog::info("Max workgroup count y: {}",
                properties.limits.maxComputeWorkGroupCount[1]);
   spdlog::info("Max workgroup count z: {}",
                properties.limits.maxComputeWorkGroupCount[2]);
-  return physicalDevice;
+
+  return selected_device;
 }
 
 uint32_t find_queue_family(VkPhysicalDevice &physicalDevice,
                            VkQueueFlagBits queueFlags = VK_QUEUE_COMPUTE_BIT) {
-  uint32_t queueFamilyCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
+  uint32_t queue_family_count = 0;
+  vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count,
                                            nullptr);
-  std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
-                                           queueFamilies.data());
-  int i = 0;
-  int queue_family_index = -1;
-  spdlog::info("queue family count: {}", queueFamilyCount);
-  for (const auto &queueFamily : queueFamilies) {
-    spdlog::info("queue family {} has {} queues", i,
-                 queueFamilies[i].queueCount);
-    if (queueFamily.queueFlags & queueFlags && queueFamily.queueCount > 0 &&
-        queue_family_index == -1) {
-      spdlog::info("found compute queue family index {}", i);
-      queue_family_index = i;
+
+  std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+  vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queue_family_count,
+                                           queue_families.data());
+
+  spdlog::info("Queue family count: {}", queue_family_count);
+
+  for (uint32_t i = 0; i < queue_families.size(); ++i) {
+    const auto &queue_family = queue_families[i];
+    spdlog::info("Queue family {} has {} queues", i, queue_family.queueCount);
+
+    if ((queue_family.queueFlags & queueFlags) && queue_family.queueCount > 0) {
+      spdlog::info("Found compute queue family index {}", i);
+      return i;
     }
-    i++;
   }
-  return queue_family_index;
+
+  throw std::runtime_error("Failed to find a suitable queue family.");
 }
 
 template <int n_extensions>
-VkDevice mk_logical_device(VkPhysicalDevice &physicalDevice,
-                           uint32_t queue_family_index,
-                           std::array<char *, n_extensions> extension_names) {
-  VkDevice device = {};
-  float queuePriority = 1.0f;
-  VkDeviceQueueCreateInfo queueCreateInfo = {
-      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .pNext = nullptr,
-      .flags = 0,
-      .queueFamilyIndex = queue_family_index,
-      .queueCount = 1,
-      .pQueuePriorities = &queuePriority,
-  };
-  /*
-  const char *extensionNames[] = {
-      VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
-  };
-  */
+VkDevice
+create_logical_device(VkPhysicalDevice &physical_device,
+                      uint32_t queue_family_index,
+                      std::array<const char *, n_extensions> extension_names) {
+  float queue_priority = 1.0f;
+
+  VkDeviceQueueCreateInfo queue_create_info{};
+  queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_create_info.queueFamilyIndex = queue_family_index;
+  queue_create_info.queueCount = 1;
+  queue_create_info.pQueuePriorities = &queue_priority;
+
   spdlog::info("# of extensions: {}", extension_names.size());
-  VkDeviceCreateInfo createInfo = {
-      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-      .queueCreateInfoCount = 1,
-      .pQueueCreateInfos = &queueCreateInfo,
-      .enabledLayerCount = 0,
-      .ppEnabledLayerNames = nullptr,
-      .enabledExtensionCount = static_cast<uint32_t>(extension_names.size()),
-      .ppEnabledExtensionNames = extension_names.data(),
-      .pEnabledFeatures = nullptr,
-      /*
-.flags = VK_DEVICE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR, // TODO - this
-                                                       // needed?
-      */
-  };
+
+  VkDeviceCreateInfo create_info{};
+  create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  create_info.queueCreateInfoCount = 1;
+  create_info.pQueueCreateInfos = &queue_create_info;
+  create_info.enabledLayerCount = 0;
+  create_info.ppEnabledLayerNames = nullptr;
+  create_info.enabledExtensionCount =
+      static_cast<uint32_t>(extension_names.size());
+  create_info.ppEnabledExtensionNames = extension_names.data();
+  create_info.pEnabledFeatures = nullptr;
+
+  VkDevice device;
   VkResult result =
-      vkCreateDevice(physicalDevice, &createInfo, nullptr, &device);
-  check(result, "Logical device creation.");
+      vkCreateDevice(physical_device, &create_info, nullptr, &device);
+
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("Failed to create logical device.");
+  }
+
   return device;
 }
 
-VkBuffer mk_buffer(int size, VkDevice &device, VkBufferUsageFlags usage) {
-  VkBuffer buffer = {};
-  VkBufferCreateInfo bufferCreateInfo = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(float) * size,
-      .usage = usage,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-  };
-  VkResult result = vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer);
-  check(result, "Buffer creation.");
+VkBuffer create_buffer(int size, VkDevice &device, VkBufferUsageFlags usage) {
+  VkBufferCreateInfo buffer_create_info{};
+  buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer_create_info.size = sizeof(float) * size;
+  buffer_create_info.usage = usage;
+  buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  VkBuffer buffer;
+  VkResult result =
+      vkCreateBuffer(device, &buffer_create_info, nullptr, &buffer);
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("Failed to create buffer.");
+  }
   return buffer;
 }
 
-std::optional<int> query_memory_type(VkPhysicalDevice &physicalDevice) {
-  // find a memory type that satisfies the requirements
-  VkPhysicalDeviceMemoryProperties memoryProperties = {};
-  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
-  int index = -1;
-  for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
-    // print name of memory type
-    spdlog::info("Memory type {}:", i);
-    if (memoryProperties.memoryTypes[i].propertyFlags &
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-      spdlog::info("Memory type set (host visible): {}", i);
-    } else {
-      spdlog::info("Memory type skipped (not host-visible): {}", i);
-    }
-    if ((memoryProperties.memoryTypes[i].propertyFlags &
-         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-      spdlog::info("Memory type set (coherent): {}", i);
-    } else {
-      spdlog::info("Memory type skipped (not coherent): {}", i);
-    }
-    if ((memoryProperties.memoryTypes[i].propertyFlags &
-         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
-        (memoryProperties.memoryTypes[i].propertyFlags &
-         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-      index = i;
-      spdlog::info("Setting memory index to: {}", i);
+std::optional<uint32_t> query_memory_type(VkPhysicalDevice &physicalDevice) {
+  // Find a memory type that satisfies the requirements
+  VkPhysicalDeviceMemoryProperties memory_properties;
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memory_properties);
+
+  // Iterate through the memory types and find one that is both host visible and
+  // host coherent
+  for (uint32_t i = 0; i < memory_properties.memoryTypeCount; ++i) {
+    bool host_visible = memory_properties.memoryTypes[i].propertyFlags &
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    bool host_coherent = memory_properties.memoryTypes[i].propertyFlags &
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    // Log memory type information
+    spdlog::info("Memory type {}: host_visible={}, host_coherent={}", i,
+                 host_visible, host_coherent);
+
+    if (host_visible && host_coherent) {
+      spdlog::info("Selected memory index: {}", i);
+      return i;
     }
   }
-  if (index == -1) {
-    return std::nullopt;
-  }
-  return std::optional<int>(index);
+
+  // No suitable memory type found
+  spdlog::warn("No suitable memory type found.");
+  return std::nullopt;
 }
 
 VkDeviceMemory bind_buffer(VkDevice &device, VkBuffer &buffer, int memory_type,
                            int size) {
-  VkDeviceMemory memory = {};
-  VkMemoryRequirements memoryRequirements = {};
-  // TODO - setup size correctly as a parameter
-  memoryRequirements.size = size * sizeof(float);
-  VkMemoryAllocateInfo memoryAllocateInfo = {};
-  memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  memoryAllocateInfo.allocationSize = memoryRequirements.size;
-  memoryAllocateInfo.memoryTypeIndex = memory_type;
-  vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
-  memoryAllocateInfo.allocationSize = memoryRequirements.size;
-  spdlog::info("Memory requirements size: {}", memoryRequirements.size);
+  VkMemoryRequirements memory_requirements;
+  vkGetBufferMemoryRequirements(device, buffer, &memory_requirements);
+
+  VkMemoryAllocateInfo memory_allocate_info{};
+  memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  memory_allocate_info.allocationSize = memory_requirements.size;
+  memory_allocate_info.memoryTypeIndex = memory_type;
+
+  spdlog::info("Memory requirements size: {}", memory_requirements.size);
+
+  VkDeviceMemory memory;
   VkResult result =
-      vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &memory);
-  check(result, "Allocate GPU memory");
-  // bind memory to buffers
-  vkBindBufferMemory(device, buffer, memory, 0);
+      vkAllocateMemory(device, &memory_allocate_info, nullptr, &memory);
+
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("Failed to allocate GPU memory.");
+  }
+
+  result = vkBindBufferMemory(device, buffer, memory, 0);
+
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error("Failed to bind memory to buffers.");
+  }
+
   spdlog::info("Memory bound to buffers successfully");
   return memory;
 }
@@ -262,25 +270,30 @@ void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
 }
 
 VkShaderModule mk_shader(VkDevice &device, const std::string &shader_file) {
+  // Read shader file
   std::ifstream file(shader_file, std::ios::ate | std::ios::binary);
   if (!file.is_open()) {
-    std::cerr << "Failed to open file" << std::endl;
-    exit(1);
+    throw std::runtime_error("Failed to open shader file: " + shader_file);
   }
-  size_t fileSize = (size_t)file.tellg();
-  std::string shader(fileSize, ' ');
+
+  size_t file_size = static_cast<size_t>(file.tellg());
+  std::vector<char> shader_data(file_size);
+
   file.seekg(0);
-  file.read(shader.data(), fileSize);
+  file.read(shader_data.data(), file_size);
   file.close();
-  VkShaderModuleCreateInfo createInfo{};
-  createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  createInfo.codeSize = shader.size();
-  createInfo.pCode = reinterpret_cast<const uint32_t *>(shader.data());
-  VkShaderModule shaderModule;
+
+  // Create shader module
+  VkShaderModuleCreateInfo create_info{};
+  create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  create_info.codeSize = shader_data.size();
+  create_info.pCode = reinterpret_cast<const uint32_t *>(shader_data.data());
+
+  VkShaderModule shader_module;
   VkResult result =
-      vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule);
+      vkCreateShaderModule(device, &create_info, nullptr, &shader_module);
   check(result, "Shader module creation.");
-  return shaderModule;
+  return shader_module;
 }
 
 template <const int n_bindings>

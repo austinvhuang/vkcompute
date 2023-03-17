@@ -31,13 +31,13 @@ int main() {
   std::array<char *, n_layers> instance_layer_names = {
       const_cast<char *>("VK_LAYER_KHRONOS_validation")};
   VkInstance instance = mk_vulkan_instance<n_layers>(instance_layer_names);
-  VkPhysicalDevice physical_device = mk_physcal_device(instance);
+  VkPhysicalDevice physical_device = select_physical_device(instance);
   uint32_t qfidx = find_queue_family(physical_device);
   constexpr int n_device_extensions = 1;
   // add portability and printf
-  std::array<char *, n_device_extensions> extension_names = {
+  std::array<const char *, n_device_extensions> extension_names = {
       const_cast<char *>(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)};
-  VkDevice device = mk_logical_device<n_device_extensions>(
+  VkDevice device = create_logical_device<n_device_extensions>(
       physical_device, qfidx, extension_names);
 
   /*
@@ -52,14 +52,14 @@ int main() {
   }
   std::array<float, size> output = {};
 
-  VkBuffer buffer_in = mk_buffer(input_a.size(), device,
-                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                     VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+  VkBuffer buffer_in = create_buffer(input_a.size(), device,
+                                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                         VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
-  VkBuffer buffer_out = mk_buffer(output.size(), device,
-                                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                      VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+  VkBuffer buffer_out = create_buffer(output.size(), device,
+                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                          VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                                          VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
   auto memory_type = query_memory_type(physical_device);
   if (!memory_type) {
