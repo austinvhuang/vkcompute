@@ -30,7 +30,7 @@ int main() {
   constexpr int n_layers = 1;
   std::array<char *, n_layers> instance_layer_names = {
       const_cast<char *>("VK_LAYER_KHRONOS_validation")};
-  VkInstance instance = mk_vulkan_instance<n_layers>(instance_layer_names);
+  VkInstance instance = create_vulkan_instance<n_layers>(instance_layer_names);
   VkPhysicalDevice physical_device = select_physical_device(instance);
   uint32_t qfidx = find_queue_family(physical_device);
   constexpr int n_device_extensions = 1;
@@ -77,16 +77,16 @@ int main() {
    * Create shader module and pipeline for computation.
    */
 
-  VkShaderModule shader = mk_shader(device, "build/softmax.spv");
+  VkShaderModule shader = create_shader_module(device, "build/softmax.spv");
   constexpr int n_bindings = 2;
-  VkPipelineLayout pipeline_layout = mk_pipeline_layout<n_bindings>(device);
+  VkPipelineLayout pipeline_layout = create_pipeline_layout<n_bindings>(device);
   VkDescriptorSetLayout descriptor_set_layout =
       create_descriptor_set_layout<n_bindings>(device);
   std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts = {
       descriptor_set_layout};
-  VkDescriptorPool descriptor_pool = mk_descriptor_pool(device);
+  VkDescriptorPool descriptor_pool = create_descriptor_pool(device);
   VkDescriptorSet descriptor_set =
-      mk_descriptor_set(device, descriptor_pool, descriptor_set_layouts);
+      create_descriptor_set(device, descriptor_pool, descriptor_set_layouts);
   VkDescriptorBufferInfo bufferinfo_in =
       create_descriptor_buffer_info(buffer_in);
   VkDescriptorBufferInfo bufferinfo_out =
@@ -102,15 +102,15 @@ int main() {
   const std::array<uint32_t, 3> workgroup_size = {static_cast<uint32_t>(wgsize),
                                                   1, 1};
   VkPipeline pipeline =
-      mk_pipeline(device, pipeline_layout, shader, workgroup_size);
+      create_pipeline(device, pipeline_layout, shader, workgroup_size);
 
   /*
    * Create and record a command buffer corresponding to the compute shader
    * computation and a device queue ot submit the computation.
    */
 
-  VkCommandPool command_pool = mk_command_pool(device, qfidx);
-  VkCommandBuffer command_buffer = mk_command_buffer(device, command_pool);
+  VkCommandPool command_pool = create_command_pool(device, qfidx);
+  VkCommandBuffer command_buffer = create_command_buffer(device, command_pool);
   VkCommandBufferBeginInfo beginInfo = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       // allow command buffer to be executed multiple times

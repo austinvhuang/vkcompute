@@ -15,7 +15,7 @@ void check(VkResult &result, const char *message) {
 
 template <int n_layers>
 VkInstance
-mk_vulkan_instance(std::array<char *, n_layers> &validation_layer_names) {
+create_vulkan_instance(std::array<char *, n_layers> &validation_layer_names) {
   // application info
   VkApplicationInfo appInfo = {};
   {
@@ -271,7 +271,8 @@ void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
   spdlog::info("Memory copied successfully");
 }
 
-VkShaderModule mk_shader(VkDevice &device, const std::string &shader_file) {
+VkShaderModule create_shader_module(VkDevice &device,
+                                    const std::string &shader_file) {
   // Read shader file
   std::ifstream file(shader_file, std::ios::ate | std::ios::binary);
 
@@ -301,7 +302,7 @@ VkShaderModule mk_shader(VkDevice &device, const std::string &shader_file) {
 }
 
 template <size_t n_bindings>
-VkPipelineLayout mk_pipeline_layout(VkDevice &device) {
+VkPipelineLayout create_pipeline_layout(VkDevice &device) {
   VkPipelineLayout pipelineLayout{};
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -395,129 +396,130 @@ create_descriptor_writes(VkDescriptorSet &descriptorSet) {
   return descriptorWrites;
 }
 
-VkDescriptorPool mk_descriptor_pool(VkDevice &device) {
-  VkDescriptorPool descriptorPool = {};
-  VkDescriptorPoolSize poolSize = {};
-  poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  poolSize.descriptorCount = 3;
-  VkDescriptorPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  poolInfo.poolSizeCount = 1;
-  poolInfo.pPoolSizes = &poolSize;
-  poolInfo.maxSets = 1;
+VkDescriptorPool create_descriptor_pool(VkDevice &device) {
+  VkDescriptorPoolSize poolSize{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                .descriptorCount = 3};
+
+  VkDescriptorPoolCreateInfo poolInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .poolSizeCount = 1,
+      .pPoolSizes = &poolSize,
+      .maxSets = 1};
+
+  VkDescriptorPool descriptorPool{};
   VkResult result =
       vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool);
   check(result, "Descriptor pool creation.");
+
   return descriptorPool;
 }
 
-VkPipeline mk_pipeline(VkDevice &device, VkPipelineLayout &pipelineLayout,
-                       VkShaderModule &shaderModule,
-                       const std::array<uint32_t, 3> workgroup_size) {
-  VkPipeline pipeline = {};
-  // Set the workgroup size
-  VkSpecializationMapEntry map_entries[3] = {
-      {
-          .constantID = 0,
-          .offset = 0,
-          .size = sizeof(uint32_t),
-      },
-      {
-          .constantID = 1,
-          .offset = sizeof(uint32_t),
-          .size = sizeof(uint32_t),
-      },
-      {
-          .constantID = 2,
-          .offset = 2 * sizeof(uint32_t),
-          .size = sizeof(uint32_t),
-      },
-  };
-  // print workgroup size
+VkPipeline create_pipeline(VkDevice &device, VkPipelineLayout &pipelineLayout,
+                           VkShaderModule &shaderModule,
+                           const std::array<uint32_t, 3> &workgroup_size) {
+  std::array<VkSpecializationMapEntry, 3> map_entries{{
+      {.constantID = 0, .offset = 0, .size = sizeof(uint32_t)},
+      {.constantID = 1, .offset = sizeof(uint32_t), .size = sizeof(uint32_t)},
+      {.constantID = 2,
+       .offset = 2 * sizeof(uint32_t),
+       .size = sizeof(uint32_t)},
+  }};
+
   spdlog::info("Workgroup size: {} {} {}", workgroup_size[0], workgroup_size[1],
                workgroup_size[2]);
-  VkSpecializationInfo specialization_info = {
-      .mapEntryCount = 3,
-      .pMapEntries = map_entries,
-      .dataSize = sizeof(uint32_t) * 3,
+
+  VkSpecializationInfo specialization_info{
+      .mapEntryCount = static_cast<uint32_t>(map_entries.size()),
+      .pMapEntries = map_entries.data(),
+      .dataSize = sizeof(uint32_t) * workgroup_size.size(),
       .pData = workgroup_size.data(),
   };
-  VkPipelineShaderStageCreateInfo shaderStageInfo = {};
-  shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-  shaderStageInfo.module = shaderModule;
-  shaderStageInfo.pName = "main";
-  shaderStageInfo.pSpecializationInfo = &specialization_info;
-  VkComputePipelineCreateInfo pipelineInfo{};
-  pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-  pipelineInfo.stage = shaderStageInfo;
-  pipelineInfo.layout = pipelineLayout;
-  // pipelineInfo.stage.pSpecializationInfo = &specialization_info;
-  // check workgroup size in pipelineInfo and print to log
+
+  VkPipelineShaderStageCreateInfo shaderStageInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+      .module = shaderModule,
+      .pName = "main",
+      .pSpecializationInfo = &specialization_info,
+  };
+
+  VkComputePipelineCreateInfo pipelineInfo{
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = shaderStageInfo,
+      .layout = pipelineLayout,
+  };
+
   const VkSpecializationInfo *spec_info =
       pipelineInfo.stage.pSpecializationInfo;
-  uint32_t *data = (uint32_t *)spec_info->pData;
+  const uint32_t *data = reinterpret_cast<const uint32_t *>(spec_info->pData);
   spdlog::info("Check workgroup size: {} {} {}", data[0], data[1], data[2]);
+
+  VkPipeline pipeline{};
   VkResult result = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1,
                                              &pipelineInfo, nullptr, &pipeline);
-  if (result != VK_SUCCESS) {
-    spdlog::error("Failed to create pipeline: {}", result);
-    exit(1);
-  }
+  check(result, "Pipeline creation.");
+
   spdlog::info("Pipeline created successfully");
   return pipeline;
 }
 
 VkDescriptorSet
-mk_descriptor_set(VkDevice &device, VkDescriptorPool &pool,
-                  std::array<VkDescriptorSetLayout, 1> &layouts) {
-  VkDescriptorSet descriptorSet = {};
-  VkDescriptorSetAllocateInfo allocInfo = {};
-  allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  allocInfo.descriptorPool = pool;
-  allocInfo.descriptorSetCount = 1;
-  // array of descriptor set layouts
-  // std::vector<VkDescriptorSetLayout> layouts(1, layout);
-  allocInfo.pSetLayouts = layouts.data();
+create_descriptor_set(VkDevice &device, VkDescriptorPool &pool,
+                      const std::array<VkDescriptorSetLayout, 1> &layouts) {
+  VkDescriptorSetAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = pool,
+      .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+      .pSetLayouts = layouts.data(),
+  };
+
+  VkDescriptorSet descriptorSet{};
   VkResult result =
       vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
   check(result, "Descriptor set allocation.");
+
   return descriptorSet;
 }
 
-VkCommandPool mk_command_pool(VkDevice &device, uint32_t queueFamilyIndex) {
-  VkCommandPool commandPool = {};
-  VkCommandPoolCreateInfo poolInfo = {};
-  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  poolInfo.queueFamilyIndex = queueFamilyIndex;
-  poolInfo.flags = 0; // Optional
+VkCommandPool create_command_pool(VkDevice &device, uint32_t queueFamilyIndex) {
+  VkCommandPoolCreateInfo poolInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .queueFamilyIndex = queueFamilyIndex,
+      .flags = 0, // Optional
+  };
+
+  VkCommandPool commandPool{};
   VkResult result =
       vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool);
   check(result, "Create command pool.");
+
   return commandPool;
 }
 
-VkCommandBuffer mk_command_buffer(VkDevice &device,
-                                  VkCommandPool &commandPool) {
-  VkCommandBuffer commandBuffer = {};
-  VkCommandBufferAllocateInfo allocInfo = {};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = commandPool;
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = 1;
+VkCommandBuffer create_command_buffer(VkDevice &device,
+                                      VkCommandPool &commandPool) {
+  VkCommandBufferAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = commandPool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+
+  VkCommandBuffer commandBuffer{};
   VkResult result =
       vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
   check(result, "Command buffer allocation.");
+
   return commandBuffer;
 }
 
-template <int size>
+template <size_t size>
 void copy_to_cpu(VkDevice &device, VkDeviceMemory &buffer,
                  std::array<float, size> &data) {
-  // copy data from buffer to cpu memory
   void *data_ptr;
-  vkMapMemory(device, buffer, 0, sizeof(float) * data.size(), 0, &data_ptr);
-  memcpy(data.data(), data_ptr, sizeof(float) * data.size());
+  VkDeviceSize dataSize = sizeof(float) * data.size();
+  vkMapMemory(device, buffer, 0, dataSize, 0, &data_ptr);
+  memcpy(data.data(), data_ptr, dataSize);
   vkUnmapMemory(device, buffer);
   spdlog::info("Data copied to memory");
 }
