@@ -17,28 +17,27 @@ Build dependencies are managed by conan and the build itself is defined using cm
 - [vulkan SDK](https://www.lunarg.com/vulkan-sdk/) - vulkan SDK includes vulkan headers and library files.
 - [glslc](https://github.com/google/shaderc#downloads) - glsl compiler which compiles `src/softmax.glsl` to `build/softmax.spv`.
 
+Optional:
+
+`rg` and `entr` command line tools are used in the `Makefile` for continuous build watching. `clang-format` is also used by the makefile to automate formatting cleanup.
+
+## Project Structure
+
+- `src/main.cpp` the main entrypoint for the program - sets up, runs the shader computation, and prints the result.
+- `src/vkcompute.hpp` header file of helper functions supporting setting up vulkan.
+- `src/softmax.glsl` compute shader implementing a softmax computation as a (single workgroup) parallel sum reduction on the GPU.
+
 ## Building
 
-On mac:
+Building and running requires two things:
 
-```
-	mkdir -p build 
-	cd build && cmake .. -DCMAKE_BUILD_TYPE=Release
-	cd build && cmake --build .
-```
+1. Building the computer shader `src/softmax.glsl` to create a SPIR-V shader artifact `build/softmax.spv`
+2. Building the main program with cmake
 
-Alternatively use `make build-osx`.
+On mac, the program can be built with `make build/softmax.spv` to build the shader followed by `make run-osx` to build and run the program (see the `Makefile` for details if you want to do the steps manually. 
 
-Then run `build/vkcompute` (note that the program loads the `softmax.spv` shader at runtime so being in the right relative path (the top level directory) is important. Otherwise the shader file won't be found and loaded.
-
-
-
-
-
-## Running
-
-*TODO*
+On linux, the program can be built with `make build/softmax.spv` to build the shader followed by `make run-linux` to build and run the program. [NOTE / TODO : it may crash if you don't have the khronos compatibility extension - TODO make this optional]
 
 ## Contact and Contributions
 
-*TODO*
+You can find me via DM on twitter [@austinvhuang](https://twitter.com/austinvhuang).

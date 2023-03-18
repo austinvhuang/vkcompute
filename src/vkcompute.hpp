@@ -1,4 +1,5 @@
 #include "spdlog/spdlog.h"
+#include <exception>
 #include <fstream>
 #include <iostream>
 
@@ -7,7 +8,7 @@ void check(VkResult &result, const char *message) {
   if (result != VK_SUCCESS) {
     spdlog::error("Failed to execute: {}", message);
     spdlog::error("Error code: {}", result);
-    exit(1);
+    std::runtime_error("Failed to execute: " + std::string(message));
   } else {
     spdlog::info("Success: {}", message);
   }
