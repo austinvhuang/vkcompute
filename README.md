@@ -2,7 +2,13 @@
 
 A minimal example and template repo for GPU computation using vulkan.
 
-What does it do?
+## Who / What is this for?
+
+This can be used as a starter / template repo for experimenting with compute shaders for general purpose computation. 
+
+Hopefully it gets people to an end-to-end GPU computation working faster instead of having to transpose "hello triangle" tutorials into non-rendering general purpose compute use cases while trying to learning vulkan at the same time (which was mostly my experience).
+
+## What does it do?
 
 1. `main.cpp` sets up input and output arrays of numbers on the host with the help of vulkan utility functions in `vkcompute.hpp`
 2. Calls out to execute a softmax computation implementated as a GPU compute shader in `softmax.glsl` (which is compiled to an SPIR-V artifact `build/softmax.spv`. 
