@@ -22,8 +22,6 @@ build-osx: .PHONY
 
 build-linux: .PHONY
 	mkdir -p build 
-	export CC=/usr/bin/clang; \
-	export CXX=/usr/bin/clang++; \
 	cd build && cmake .. -DCMAKE_TOOLCHAIN_FILE=../conan/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
 	cd build && cmake --build .
 
