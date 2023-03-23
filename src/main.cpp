@@ -45,41 +45,38 @@ int main() {
    * and device memory handles for associated GPU memory.
    */
 
-  constexpr size_t size = 16;
+  constexpr size_t size = 8;
   std::array<float, size> input_a{};
   for (size_t i = 0; i < size; i++) {
-    // for testing, fill the array with increasing values from 0 to size
+    // for test input values, fill the array with increasing values from 0 to
+    // size
     input_a[i] = static_cast<float>(i);
   }
   std::array<float, size> output{};
-
   VkBuffer buffer_in = create_buffer(input_a.size(), device,
                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                          VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-
   VkBuffer buffer_out = create_buffer(output.size(), device,
                                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                           VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                           VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-
   auto memory_type = query_memory_type(physical_device);
   if (!memory_type) {
     spdlog::error("Failed to find memory type");
-    exit(1);
+    std::runtime_error("Failed to find memory type");
   }
   VkDeviceMemory memory_in =
       bind_buffer(device, buffer_in, memory_type.value(), input_a.size());
   VkDeviceMemory memory_out =
       bind_buffer(device, buffer_out, memory_type.value(), output.size());
   copy_to_gpu<size>(device, memory_in, input_a);
-  copy_to_gpu<size>(device, memory_out, output);
 
   /*
-   * Create shader module and pipeline for computation.
+   * Create descriptor set layout, descriptor pool, and descriptor set for
+   * binding the input and output buffers to the compute shader.
    */
 
-  VkShaderModule shader = create_shader_module(device, "build/softmax.spv");
-  constexpr size_t n_bindings = 2;
+  constexpr size_t n_bindings = 2; // 2 bindings: input and output
   VkPipelineLayout pipeline_layout = create_pipeline_layout<n_bindings>(device);
   VkDescriptorSetLayout descriptor_set_layout =
       create_descriptor_set_layout<n_bindings>(device);
@@ -88,33 +85,39 @@ int main() {
   VkDescriptorPool descriptor_pool = create_descriptor_pool(device);
   VkDescriptorSet descriptor_set =
       create_descriptor_set(device, descriptor_pool, descriptor_set_layouts);
-
   VkDescriptorBufferInfo bufferinfo_in =
       create_descriptor_buffer_info(buffer_in);
   VkDescriptorBufferInfo bufferinfo_out =
       create_descriptor_buffer_info(buffer_out);
-
   std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites =
       create_descriptor_writes<n_bindings>(descriptor_set);
   descriptorWrites[0].pBufferInfo = &bufferinfo_in;
   descriptorWrites[1].pBufferInfo = &bufferinfo_out;
-
-  spdlog::info("descriptorWrites.size(): {}", descriptorWrites.size());
   vkUpdateDescriptorSets(device, n_bindings, descriptorWrites.data(), 0,
                          nullptr);
+  spdlog::info("Created descriptor set.");
+
+  /*
+   * Create shader module and pipeline for computation.
+   */
 
   uint32_t wgsize = static_cast<uint32_t>(output.size());
   std::array<uint32_t, 3> workgroup_size = {wgsize, 1, 1};
+  VkShaderModule shader = create_shader_module(device, "build/softmax.spv");
   VkPipeline pipeline =
       create_pipeline(device, pipeline_layout, shader, workgroup_size);
 
   /*
-   * Create and record a command buffer corresponding to the compute shader
-   * computation and a device queue to submit the computation.
+   * Create a command buffer and corresponding command pool for submitting
+   * commands to the GPU.
    */
 
   VkCommandPool command_pool = create_command_pool(device, qfidx);
   VkCommandBuffer command_buffer = create_command_buffer(device, command_pool);
+
+  /*
+   * Record commands to the command buffer.
+   */
 
   VkCommandBufferBeginInfo beginInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -123,17 +126,21 @@ int main() {
                                                         // to be executed
                                                         // multiple times
   };
-
   VkResult result = vkBeginCommandBuffer(command_buffer, &beginInfo);
   check(result, "Begin command buffer.");
 
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
-
   vkCmdDispatch(command_buffer, size / workgroup_size[0], 1, 1);
+
   result = vkEndCommandBuffer(command_buffer);
   check(result, "End command buffer.");
+
+  /*
+   * Create a queue for submitting command buffers to the GPU.
+   * The queue is created from the device and the queue family index.
+   */
 
   VkQueue queue;
   const uint32_t queue_index = 0;
@@ -153,12 +160,12 @@ int main() {
         .pCommandBuffers = &command_buffer,
     };
     result = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    check(result, "Submit command buffer");
+    check(result, "Submit command buffer.");
 
     result = vkQueueWaitIdle(queue);
-    check(result, "Wait for queue to become idle");
+    check(result, "Wait for queue to become idle.");
 
-    copy_to_cpu<size>(device, memory_in, input_a);
+    // Print input and output to the screen
     copy_to_cpu<size>(device, memory_out, output);
     spdlog::info("Input: ");
     int idx = 0;
@@ -172,6 +179,8 @@ int main() {
       spdlog::info("{} : {}", idx, x);
       idx++;
     }
+
+    // Test re-using the computation or let the user quit
     std::cout << "Enter q to quit, anything else to re-run computation > ";
     std::getline(std::cin, input);
   }
