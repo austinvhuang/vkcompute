@@ -28,10 +28,10 @@ int main() {
    */
 
   VkInstance instance =
-      create_vulkan_instance(VK_MAKE_API_VERSION(1, 3, 236, 0));
-  VkPhysicalDevice physical_device = select_physical_device(instance);
-  uint32_t qfidx = find_queue_family(physical_device);
-  VkDevice device = create_logical_device(physical_device, qfidx);
+      vkc::create_vulkan_instance(VK_MAKE_API_VERSION(1, 3, 236, 0));
+  VkPhysicalDevice physical_device = vkc::select_physical_device(instance);
+  uint32_t qfidx = vkc::find_queue_family(physical_device);
+  VkDevice device = vkc::create_logical_device(physical_device, qfidx);
 
   /*
    * Create host-side array resources (C++ arrays), vkBuffer handles to them,
@@ -46,23 +46,23 @@ int main() {
     input_a[i] = static_cast<float>(i);
   }
   std::array<float, size> output{};
-  VkBuffer buffer_in = create_buffer(input_a.size(), device,
-                                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                         VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-  VkBuffer buffer_out = create_buffer(output.size(), device,
-                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                          VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                          VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-  auto memory_type = query_memory_type(physical_device);
+  VkBuffer buffer_in = vkc::create_buffer(input_a.size(), device,
+                                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                              VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+  VkBuffer buffer_out = vkc::create_buffer(
+      output.size(), device,
+      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+          VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+  auto memory_type = vkc::query_memory_type(physical_device);
   if (!memory_type) {
     spdlog::error("Failed to find memory type");
     std::runtime_error("Failed to find memory type");
   }
   VkDeviceMemory memory_in =
-      bind_buffer(device, buffer_in, memory_type.value(), input_a.size());
+      vkc::bind_buffer(device, buffer_in, memory_type.value(), input_a.size());
   VkDeviceMemory memory_out =
-      bind_buffer(device, buffer_out, memory_type.value(), output.size());
-  copy_to_gpu<size>(device, memory_in, input_a);
+      vkc::bind_buffer(device, buffer_out, memory_type.value(), output.size());
+  vkc::copy_to_gpu<size>(device, memory_in, input_a);
 
   /*
    * Create descriptor set layout, descriptor pool, and descriptor set for
@@ -70,20 +70,21 @@ int main() {
    */
 
   constexpr size_t n_bindings = 2; // 2 bindings: input and output
-  VkPipelineLayout pipeline_layout = create_pipeline_layout<n_bindings>(device);
+  VkPipelineLayout pipeline_layout =
+      vkc::create_pipeline_layout<n_bindings>(device);
   VkDescriptorSetLayout descriptor_set_layout =
-      create_descriptor_set_layout<n_bindings>(device);
+      vkc::create_descriptor_set_layout<n_bindings>(device);
   std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts = {
       descriptor_set_layout};
-  VkDescriptorPool descriptor_pool = create_descriptor_pool(device);
-  VkDescriptorSet descriptor_set =
-      create_descriptor_set(device, descriptor_pool, descriptor_set_layouts);
+  VkDescriptorPool descriptor_pool = vkc::create_descriptor_pool(device);
+  VkDescriptorSet descriptor_set = vkc::create_descriptor_set(
+      device, descriptor_pool, descriptor_set_layouts);
   VkDescriptorBufferInfo bufferinfo_in =
-      create_descriptor_buffer_info(buffer_in);
+      vkc::create_descriptor_buffer_info(buffer_in);
   VkDescriptorBufferInfo bufferinfo_out =
-      create_descriptor_buffer_info(buffer_out);
+      vkc::create_descriptor_buffer_info(buffer_out);
   std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites =
-      create_descriptor_writes<n_bindings>(descriptor_set);
+      vkc::create_descriptor_writes<n_bindings>(descriptor_set);
   descriptorWrites[0].pBufferInfo = &bufferinfo_in;
   descriptorWrites[1].pBufferInfo = &bufferinfo_out;
   vkUpdateDescriptorSets(device, n_bindings, descriptorWrites.data(), 0,
@@ -96,17 +97,19 @@ int main() {
 
   uint32_t wgsize = static_cast<uint32_t>(output.size());
   std::array<uint32_t, 3> workgroup_size = {wgsize, 1, 1};
-  VkShaderModule shader = create_shader_module(device, "build/softmax.spv");
+  VkShaderModule shader =
+      vkc::create_shader_module(device, "build/softmax.spv");
   VkPipeline pipeline =
-      create_pipeline(device, pipeline_layout, shader, workgroup_size);
+      vkc::create_pipeline(device, pipeline_layout, shader, workgroup_size);
 
   /*
    * Create a command buffer and corresponding command pool for submitting
    * commands to the GPU.
    */
 
-  VkCommandPool command_pool = create_command_pool(device, qfidx);
-  VkCommandBuffer command_buffer = create_command_buffer(device, command_pool);
+  VkCommandPool command_pool = vkc::create_command_pool(device, qfidx);
+  VkCommandBuffer command_buffer =
+      vkc::create_command_buffer(device, command_pool);
 
   /*
    * Record commands to the command buffer.
@@ -120,7 +123,7 @@ int main() {
                                                         // multiple times
   };
   VkResult result = vkBeginCommandBuffer(command_buffer, &beginInfo);
-  check(result, "Begin command buffer.");
+  vkc::check(result, "Begin command buffer.");
 
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -128,7 +131,7 @@ int main() {
   vkCmdDispatch(command_buffer, size / workgroup_size[0], 1, 1);
 
   result = vkEndCommandBuffer(command_buffer);
-  check(result, "End command buffer.");
+  vkc::check(result, "End command buffer.");
 
   /*
    * Create a queue for submitting command buffers to the GPU.
@@ -153,13 +156,13 @@ int main() {
         .pCommandBuffers = &command_buffer,
     };
     result = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    check(result, "Submit command buffer.");
+    vkc::check(result, "Submit command buffer.");
 
     result = vkQueueWaitIdle(queue);
-    check(result, "Wait for queue to become idle.");
+    vkc::check(result, "Wait for queue to become idle.");
 
     // Print input and output to the screen
-    copy_to_cpu<size>(device, memory_out, output);
+    vkc::copy_to_cpu<size>(device, memory_out, output);
     spdlog::info("Input: ");
     int idx = 0;
     for (auto &x : input_a) {

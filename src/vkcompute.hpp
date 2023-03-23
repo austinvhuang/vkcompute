@@ -3,6 +3,8 @@
 #include <fstream>
 #include <iostream>
 
+namespace vkc {
+
 /* Generic function to check a VkResult and log success/fail condition */
 void check(const VkResult &result, const char *message) {
   if (result != VK_SUCCESS) {
@@ -546,3 +548,5 @@ void copy_to_cpu(VkDevice &device, VkDeviceMemory &buffer,
   vkUnmapMemory(device, buffer);
   spdlog::info("Data copied to memory");
 }
+
+} // namespace vkc
