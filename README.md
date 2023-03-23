@@ -1,4 +1,4 @@
-# vkCompute
+# vkcompute
 
 A minimal example and template repo for GPU computation using vulkan.
 
