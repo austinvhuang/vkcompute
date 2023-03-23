@@ -27,16 +27,16 @@ int main() {
    * Setup vulkan instance, physical and logical devices.
    */
 
-  constexpr int n_layers = 1;
-  std::array<char *, n_layers> instance_layer_names = {
-      const_cast<char *>("VK_LAYER_KHRONOS_validation")};
-  VkInstance instance = create_vulkan_instance<n_layers>(instance_layer_names);
+  constexpr size_t n_layers = 1;
+  constexpr size_t n_device_extensions = 1;
+  std::array<const char *, n_layers> instance_layer_names = {
+      "VK_LAYER_KHRONOS_validation"};
+  std::array<const char *, n_device_extensions> extension_names = {
+      VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME};
+  VkInstance instance = create_vulkan_instance<n_layers>(
+      instance_layer_names, VK_MAKE_API_VERSION(1, 3, 236, 0));
   VkPhysicalDevice physical_device = select_physical_device(instance);
   uint32_t qfidx = find_queue_family(physical_device);
-  constexpr int n_device_extensions = 1;
-  // add portability and printf
-  std::array<const char *, n_device_extensions> extension_names = {
-      const_cast<char *>(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)};
   VkDevice device = create_logical_device<n_device_extensions>(
       physical_device, qfidx, extension_names);
 
@@ -45,12 +45,13 @@ int main() {
    * and device memory handles for associated GPU memory.
    */
 
-  constexpr int size = 16;
-  std::array<float, size> input_a = {};
-  for (int i = 0; i < size; i++) {
+  constexpr size_t size = 16;
+  std::array<float, size> input_a{};
+  for (size_t i = 0; i < size; i++) {
+    // for testing, fill the array with increasing values from 0 to size
     input_a[i] = static_cast<float>(i);
   }
-  std::array<float, size> output = {};
+  std::array<float, size> output{};
 
   VkBuffer buffer_in = create_buffer(input_a.size(), device,
                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
@@ -78,7 +79,7 @@ int main() {
    */
 
   VkShaderModule shader = create_shader_module(device, "build/softmax.spv");
-  constexpr int n_bindings = 2;
+  constexpr size_t n_bindings = 2;
   VkPipelineLayout pipeline_layout = create_pipeline_layout<n_bindings>(device);
   VkDescriptorSetLayout descriptor_set_layout =
       create_descriptor_set_layout<n_bindings>(device);
@@ -87,36 +88,42 @@ int main() {
   VkDescriptorPool descriptor_pool = create_descriptor_pool(device);
   VkDescriptorSet descriptor_set =
       create_descriptor_set(device, descriptor_pool, descriptor_set_layouts);
+
   VkDescriptorBufferInfo bufferinfo_in =
       create_descriptor_buffer_info(buffer_in);
   VkDescriptorBufferInfo bufferinfo_out =
       create_descriptor_buffer_info(buffer_out);
+
   std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites =
       create_descriptor_writes<n_bindings>(descriptor_set);
   descriptorWrites[0].pBufferInfo = &bufferinfo_in;
   descriptorWrites[1].pBufferInfo = &bufferinfo_out;
+
   spdlog::info("descriptorWrites.size(): {}", descriptorWrites.size());
   vkUpdateDescriptorSets(device, n_bindings, descriptorWrites.data(), 0,
                          nullptr);
-  uint32_t wgsize = output.size();
-  const std::array<uint32_t, 3> workgroup_size = {static_cast<uint32_t>(wgsize),
-                                                  1, 1};
+
+  uint32_t wgsize = static_cast<uint32_t>(output.size());
+  std::array<uint32_t, 3> workgroup_size = {wgsize, 1, 1};
   VkPipeline pipeline =
       create_pipeline(device, pipeline_layout, shader, workgroup_size);
 
   /*
    * Create and record a command buffer corresponding to the compute shader
-   * computation and a device queue ot submit the computation.
+   * computation and a device queue to submit the computation.
    */
 
   VkCommandPool command_pool = create_command_pool(device, qfidx);
   VkCommandBuffer command_buffer = create_command_buffer(device, command_pool);
-  VkCommandBufferBeginInfo beginInfo = {
+
+  VkCommandBufferBeginInfo beginInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      // allow command buffer to be executed multiple times
-      // -
-      .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+      .flags =
+          VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, // Allow command buffer
+                                                        // to be executed
+                                                        // multiple times
   };
+
   VkResult result = vkBeginCommandBuffer(command_buffer, &beginInfo);
   check(result, "Begin command buffer.");
 
@@ -140,7 +147,7 @@ int main() {
 
   std::string input = "";
   while (input != "q") {
-    VkSubmitInfo submitInfo = {
+    const VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &command_buffer,
@@ -165,9 +172,9 @@ int main() {
       spdlog::info("{} : {}", idx, x);
       idx++;
     }
-    // get keyboard input
     std::cout << "Enter q to quit, anything else to re-run computation > ";
     std::getline(std::cin, input);
   }
+
   spdlog::info("Done");
 }

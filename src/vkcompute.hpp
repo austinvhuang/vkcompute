@@ -4,7 +4,7 @@
 #include <iostream>
 
 /* Generic function to check a VkResult and log success/fail condition */
-void check(VkResult &result, const char *message) {
+void check(const VkResult &result, const char *message) {
   if (result != VK_SUCCESS) {
     spdlog::error("Failed to execute: {}", message);
     spdlog::error("Error code: {}", result);
@@ -14,78 +14,74 @@ void check(VkResult &result, const char *message) {
   }
 }
 
-template <int n_layers>
-VkInstance
-create_vulkan_instance(std::array<char *, n_layers> &validation_layer_names) {
-  // application info
-  VkApplicationInfo appInfo = {};
-  {
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.apiVersion = VK_MAKE_VERSION(1, 3, 236);
+template <size_t n_layers>
+VkInstance create_vulkan_instance(
+    const std::array<const char *, n_layers> &validation_layer_names,
+    uint32_t version) {
+  // Application info
+  VkApplicationInfo appInfo{
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .apiVersion = version,
+  };
+
+  // Validate available extensions and layers
+  auto extensions_list = vk::enumerateInstanceExtensionProperties();
+  auto layers = vk::enumerateInstanceLayerProperties();
+
+  spdlog::info("Available extensions:");
+  for (const auto &extension : extensions_list) {
+    spdlog::info("\t{}", extension.extensionName);
   }
-  // validate available extensions and layers
-  {
-    auto extensions_list = vk::enumerateInstanceExtensionProperties();
-    auto layers = vk::enumerateInstanceLayerProperties();
-    spdlog::info("available extensions:");
-    for (const auto &extension : extensions_list) {
-      spdlog::info("\t{}", extension.extensionName);
-    }
-    spdlog::info("available layers:");
-    for (const auto &layer : layers) {
-      spdlog::info("\t{}", layer.layerName);
-    }
-    spdlog::info("API version: {}.{}.{}", VK_VERSION_MAJOR(appInfo.apiVersion),
-                 VK_VERSION_MINOR(appInfo.apiVersion),
-                 VK_VERSION_PATCH(appInfo.apiVersion));
+  spdlog::info("Available layers:");
+  for (const auto &layer : layers) {
+    spdlog::info("\t{}", layer.layerName);
   }
+  spdlog::info("API version: {}.{}.{}", VK_VERSION_MAJOR(appInfo.apiVersion),
+               VK_VERSION_MINOR(appInfo.apiVersion),
+               VK_VERSION_PATCH(appInfo.apiVersion));
+
   // Check that the portability extension is available
-  {
-    auto extensions = vk::enumerateInstanceExtensionProperties();
-    bool extensionFound = false;
-    for (const auto &extension : extensions) {
-      if (strcmp(extension.extensionName,
-                 VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
-        extensionFound = true;
-        break;
-      }
-    }
-    if (!extensionFound) {
-      spdlog::error("VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME not "
-                    "found!");
-      exit(1);
+  bool portability_extension_found = false;
+  auto extensions = vk::enumerateInstanceExtensionProperties();
+  for (const auto &extension : extensions) {
+    if (strcmp(extension.extensionName,
+               VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
+      portability_extension_found = true;
+      break;
     }
   }
+  if (!portability_extension_found) {
+    spdlog::warn("VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME not found!");
+  }
+
   // Create instance
-  VkInstance instance = {};
-  {
-    const char *validationLayerName = "VK_LAYER_KHRONOS_validation";
-    const char *extensionNames[] = {
-        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
-    VkInstanceCreateInfo createInfo = {
-        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
-        .pApplicationInfo = &appInfo,
-        .enabledLayerCount =
-            static_cast<uint32_t>(validation_layer_names.size()),
-        .ppEnabledLayerNames = validation_layer_names.data(),
-        .enabledExtensionCount = sizeof(extensionNames) / sizeof(char *),
-        .ppEnabledExtensionNames = extensionNames,
-    };
-    // print enabled extensions
-    spdlog::info("Enabled layers :");
-    for (uint32_t i = 0; i < createInfo.enabledLayerCount; i++) {
-      spdlog::info("\t{}", createInfo.ppEnabledLayerNames[i]);
-    }
-    spdlog::info("Enabled extensions:");
-    for (uint32_t i = 0; i < createInfo.enabledExtensionCount; i++) {
-      spdlog::info("\t{}", createInfo.ppEnabledExtensionNames[i]);
-    }
-    // createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-    // create instance
-    VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
-    check(result, "vkCreateInstance");
+  const char *extension_names[] = {
+      VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
+
+  VkInstanceCreateInfo createInfo{
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+      .pApplicationInfo = &appInfo,
+      .enabledLayerCount = static_cast<uint32_t>(validation_layer_names.size()),
+      .ppEnabledLayerNames = validation_layer_names.data(),
+      .enabledExtensionCount = std::size(extension_names),
+      .ppEnabledExtensionNames = extension_names,
+  };
+
+  // Print enabled extensions
+  spdlog::info("Enabled layers :");
+  for (uint32_t i = 0; i < createInfo.enabledLayerCount; i++) {
+    spdlog::info("\t{}", createInfo.ppEnabledLayerNames[i]);
   }
+  spdlog::info("Enabled extensions:");
+  for (uint32_t i = 0; i < createInfo.enabledExtensionCount; i++) {
+    spdlog::info("\t{}", createInfo.ppEnabledExtensionNames[i]);
+  }
+
+  VkInstance instance{};
+  VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
+  check(result, "Create instance");
+
   return instance;
 }
 
@@ -266,7 +262,7 @@ void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
   void *data;
   VkResult result =
       vkMapMemory(device, memory, 0, sizeof(float) * input.size(), 0, &data);
-  check(result, "Map to GPU memory");
+  check(result, "Map data to GPU memory");
   memcpy(data, input.data(), sizeof(float) * input.size());
   vkUnmapMemory(device, memory);
   spdlog::info("Memory copied successfully");
