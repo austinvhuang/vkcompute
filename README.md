@@ -1,16 +1,18 @@
 # vkcompute
 
-A minimal example and template repo for GPU computation using vulkan.
+This is a minimal starter repo for experimenting with compute shaders for general purpose computation. It simply sets up an input array on the CPU, binds the data to GPU memory, dispatches a softmax computation, copies the result back to memory and prints it.
 
-## Who / What is this for?
+## Why? Who is this for?
 
-This can be used as a starter / template repo for experimenting with compute shaders for general purpose computation. 
+For a while I've been hypothesizing that LLMs are coming to personal devices and that it would be an interesting transition when that happens. With projects like ggml (llama.cpp), smelte-rs this is starting to become a reality.
 
-Hopefully it gets people to an end-to-end GPU computation working faster instead of having to transpose "hello triangle" tutorials into non-rendering general purpose compute use cases while trying to learning vulkan at the same time (which was mostly my experience).
+I'm interested in exploring if GPGPU on personal devices has something to add with vulkan and WebGPU. This is an initial small experiment towards that.
+
+Even as a tiny toy computation, figuring out how to finagle vulkan for computation use cases was pretty painful as most of the resources out there are oriented towards graphics. It's difficult to learn vulkan for the first time and at the same time determine what aspect of tutorials are relevant to compute use cases. Hopefully this repo makes it a little easier for others to onboard and start experimenting. 
 
 ## What does it do?
 
-1. `main.cpp` sets up input and output arrays of numbers on the host with the help of vulkan utility functions in `vkcompute.hpp`
+1. `main.cpp` sets up input and output arrays of numbers on the host with the help of vulkan utility functions in `vkcompute.hpp`. The computation setup in `main.cpp` is annotated to help beginners follow the big picture of setting up a computation.
 2. Calls out to execute a softmax computation implementated as a GPU compute shader in `softmax.glsl` (which is compiled to an SPIR-V artifact `build/softmax.spv`. 
 3. After the computation is finished, `main.cpp` copies the output back to the host and prints the result.
 
@@ -25,7 +27,7 @@ Build dependencies are managed by conan and the build itself is defined using cm
 
 Optional:
 
-`rg` and `entr` command line tools are used in the `Makefile` for continuous build watching. `clang-format` is also used by the makefile to automate formatting cleanup.
+`rg` and `entr` command line tools are used in the `Makefile` aliases for continuous builds. `clang-format` is also used by the makefile to automate formatting cleanup.
 
 ## Project Structure
 
