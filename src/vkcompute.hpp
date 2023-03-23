@@ -14,6 +14,12 @@ void check(const VkResult &result, const char *message) {
   }
 }
 
+/**
+ * Create a vulkan instance with some beginner-friendly defaults.
+ * Checks and enables VK_KHR_PORTABILITY_ENUMERATION_EXTENSION if it's
+ * available, mainly for OSX compatibility. Also checks and enables
+ * VK_LAYER_KHRONOS_validation layer if it's available.
+ */
 VkInstance create_vulkan_instance(uint32_t version) {
   // Application info
   VkApplicationInfo appInfo{
