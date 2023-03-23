@@ -22,7 +22,7 @@ build-osx: .PHONY
 
 build-linux: .PHONY
 	mkdir -p build 
-	cd build && cmake .. -DCMAKE_TOOLCHAIN_FILE=../conan/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+	cd build && cmake .. -DCMAKE_TOOLCHAIN_FILE=../conan/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release 
 	cd build && cmake --build .
 
 build/softmax.spv: .PHONY
@@ -33,9 +33,12 @@ build/softmax.spv: .PHONY
 	glslc -fshader-stage=compute src/softmax.glsl -o build/softmax.spv
 
 watch-shaders:
-	rg --files | entr -s "make build/softmax.spv && echo 'Compiled shader'"
+	rg --files | entr -s "mkdir -p ./build && make build/softmax.spv && echo 'Compiled shader'"
 
-make run-osx: build-osx build/softmax.spv
+run-osx: build-osx build/softmax.spv
+	./build/vkcompute
+
+run-linux: build-linux build/softmax.spv
 	./build/vkcompute
 
 watch-osx: .PHONY build/softmax.spv

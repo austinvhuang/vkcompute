@@ -14,58 +14,47 @@ void check(const VkResult &result, const char *message) {
   }
 }
 
-template <size_t n_layers>
-VkInstance create_vulkan_instance(
-    const std::array<const char *, n_layers> &validation_layer_names,
-    uint32_t version) {
+VkInstance create_vulkan_instance(uint32_t version) {
   // Application info
   VkApplicationInfo appInfo{
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .apiVersion = version,
   };
 
+  std::vector<const char *> layers{};
+  std::vector<const char *> extensions{};
+
   // Validate available extensions and layers
   auto extensions_list = vk::enumerateInstanceExtensionProperties();
-  auto layers = vk::enumerateInstanceLayerProperties();
+  auto layers_list = vk::enumerateInstanceLayerProperties();
 
   spdlog::info("Available extensions:");
   for (const auto &extension : extensions_list) {
     spdlog::info("\t{}", extension.extensionName);
+    if (strcmp(extension.extensionName,
+               VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
+      extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    }
   }
   spdlog::info("Available layers:");
   for (const auto &layer : layers) {
-    spdlog::info("\t{}", layer.layerName);
+    spdlog::info("\t{}", layer);
+    if (strcmp(layer, "VK_LAYER_KHRONOS_validation") == 0) {
+      layers.push_back("VK_LAYER_KHRONOS_validation");
+    }
   }
   spdlog::info("API version: {}.{}.{}", VK_VERSION_MAJOR(appInfo.apiVersion),
                VK_VERSION_MINOR(appInfo.apiVersion),
                VK_VERSION_PATCH(appInfo.apiVersion));
 
-  // Check that the portability extension is available
-  bool portability_extension_found = false;
-  auto extensions = vk::enumerateInstanceExtensionProperties();
-  for (const auto &extension : extensions) {
-    if (strcmp(extension.extensionName,
-               VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
-      portability_extension_found = true;
-      break;
-    }
-  }
-  if (!portability_extension_found) {
-    spdlog::warn("VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME not found!");
-  }
-
-  // Create instance
-  const char *extension_names[] = {
-      VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
-
   VkInstanceCreateInfo createInfo{
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
       .pApplicationInfo = &appInfo,
-      .enabledLayerCount = static_cast<uint32_t>(validation_layer_names.size()),
-      .ppEnabledLayerNames = validation_layer_names.data(),
-      .enabledExtensionCount = std::size(extension_names),
-      .ppEnabledExtensionNames = extension_names,
+      .enabledLayerCount = static_cast<uint32_t>(layers.size()),
+      .ppEnabledLayerNames = layers.data(),
+      .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+      .ppEnabledExtensionNames = extensions.data(),
   };
 
   // Print enabled extensions
@@ -146,11 +135,37 @@ uint32_t find_queue_family(VkPhysicalDevice &physicalDevice,
   throw std::runtime_error("Failed to find a suitable queue family.");
 }
 
-template <int n_extensions>
-VkDevice
-create_logical_device(VkPhysicalDevice &physical_device,
-                      uint32_t queue_family_index,
-                      std::array<const char *, n_extensions> extension_names) {
+std::vector<VkExtensionProperties>
+get_supported_device_extensions(VkPhysicalDevice physical_device) {
+  uint32_t extension_count = 0;
+  // Get the count of supported extensions
+  vkEnumerateDeviceExtensionProperties(physical_device, nullptr,
+                                       &extension_count, nullptr);
+  // Allocate a vector to store the supported extensions
+  std::vector<VkExtensionProperties> supported_extensions(extension_count);
+  // Query the supported extensions
+  vkEnumerateDeviceExtensionProperties(
+      physical_device, nullptr, &extension_count, supported_extensions.data());
+  return supported_extensions;
+}
+
+VkDevice create_logical_device(VkPhysicalDevice &physical_device,
+                               uint32_t queue_family_index) {
+
+  std::vector<const char *> extension_names;
+  std::vector<VkExtensionProperties> extensions =
+      get_supported_device_extensions(physical_device);
+  bool portability_subset_found = false;
+  spdlog::info("Device extensions:");
+  for (auto extension : extensions) {
+    spdlog::info("{}", extension.extensionName);
+    if (strcmp(extension.extensionName,
+               VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME) == 0) {
+      portability_subset_found = true;
+      extension_names.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+    }
+  }
+
   float queue_priority = 1.0f;
 
   VkDeviceQueueCreateInfo queue_create_info{};
@@ -160,6 +175,10 @@ create_logical_device(VkPhysicalDevice &physical_device,
   queue_create_info.pQueuePriorities = &queue_priority;
 
   spdlog::info("# of extensions: {}", extension_names.size());
+  // print extensions
+  for (auto extension : extension_names) {
+    spdlog::info("Including extension in logical device: {}", extension);
+  }
 
   VkDeviceCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -383,9 +402,9 @@ create_descriptor_writes(VkDescriptorSet &descriptorSet) {
                              .dstSet = descriptorSet,
                              .dstBinding = static_cast<uint32_t>(idx),
                              .dstArrayElement = 0,
+                             .descriptorCount = 1,
                              .descriptorType =
                                  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                             .descriptorCount = 1,
                              .pImageInfo = nullptr,
                              .pTexelBufferView = nullptr};
   }
@@ -399,9 +418,10 @@ VkDescriptorPool create_descriptor_pool(VkDevice &device) {
 
   VkDescriptorPoolCreateInfo poolInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = 1,
       .poolSizeCount = 1,
       .pPoolSizes = &poolSize,
-      .maxSets = 1};
+  };
 
   VkDescriptorPool descriptorPool{};
   VkResult result =
@@ -481,8 +501,8 @@ create_descriptor_set(VkDevice &device, VkDescriptorPool &pool,
 VkCommandPool create_command_pool(VkDevice &device, uint32_t queueFamilyIndex) {
   VkCommandPoolCreateInfo poolInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .queueFamilyIndex = queueFamilyIndex,
       .flags = 0, // Optional
+      .queueFamilyIndex = queueFamilyIndex,
   };
 
   VkCommandPool commandPool{};

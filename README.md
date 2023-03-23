@@ -42,7 +42,7 @@ Building and running requires two things:
 
 On mac, the program can be built with `make build/softmax.spv` to build the shader followed by `make run-osx` to build and run the program (see the `Makefile` for details if you want to do the steps manually. 
 
-On linux, the program can be built with `make build/softmax.spv` to build the shader followed by `make run-linux` to build and run the program. [NOTE / TODO : it may crash if you don't have the khronos compatibility extension - TODO make this optional]
+On linux, the program can be built with `make build/softmax.spv` to build the shader followed by `make run-linux` to build and run the program. 
 
 ## Contact and Contributions
 

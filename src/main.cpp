@@ -27,18 +27,11 @@ int main() {
    * Setup vulkan instance, physical and logical devices.
    */
 
-  constexpr size_t n_layers = 1;
-  constexpr size_t n_device_extensions = 1;
-  std::array<const char *, n_layers> instance_layer_names = {
-      "VK_LAYER_KHRONOS_validation"};
-  std::array<const char *, n_device_extensions> extension_names = {
-      VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME};
-  VkInstance instance = create_vulkan_instance<n_layers>(
-      instance_layer_names, VK_MAKE_API_VERSION(1, 3, 236, 0));
+  VkInstance instance =
+      create_vulkan_instance(VK_MAKE_API_VERSION(1, 3, 236, 0));
   VkPhysicalDevice physical_device = select_physical_device(instance);
   uint32_t qfidx = find_queue_family(physical_device);
-  VkDevice device = create_logical_device<n_device_extensions>(
-      physical_device, qfidx, extension_names);
+  VkDevice device = create_logical_device(physical_device, qfidx);
 
   /*
    * Create host-side array resources (C++ arrays), vkBuffer handles to them,
