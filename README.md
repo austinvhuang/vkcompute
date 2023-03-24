@@ -1,19 +1,19 @@
 # vkcompute
 
-This is a minimal starter repo for experimenting with compute shaders for general purpose computation. It simply sets up an input array on the CPU, binds the data to GPU memory, dispatches a softmax computation, copies the result back to memory and prints it.
+This is a minimal starter project for experimenting with vulkan compute shaders for general purpose computation. It simply sets up an input array on the CPU, binds the data to GPU memory, dispatches a compute shader implementation of softmax on the GPU, copies the output back to memory and prints the result.
 
-## Why? Who is this for?
+## Who is this for?
 
-For a while I've been hypothesizing that LLMs are coming to personal devices and that it would be an interesting transition when that happens. With projects like ggml (llama.cpp), smelte-rs this is starting to become a reality.
+It's been clear that LLMs are coming to personal devices and with projects like ggml (llama.cpp), smelte-rs this prediction is starting to become a reality.
 
 I'm interested in exploring if GPGPU on personal devices has something to add with vulkan and WebGPU. This is an initial small experiment towards that.
 
-Even as a tiny toy computation, figuring out how to finagle vulkan for computation use cases was pretty painful as most of the resources out there are oriented towards graphics. It's difficult to learn vulkan for the first time and at the same time determine what aspect of tutorials are relevant to compute use cases. Hopefully this repo makes it a little easier for others to onboard and start experimenting. 
+Even as a tiny toy computation, figuring out how to finagle vulkan for non-graphics computation was pretty painful as most learning resources are oriented towards rendering. It's difficult to learn vulkan for the first time and at the same time determine what aspect of tutorials are relevant to general purpose compute use cases. I hope this repo makes it a little easier for others to onboard and start experimenting. 
 
 ## What does it do?
 
 1. `main.cpp` sets up input and output arrays of numbers on the host with the help of vulkan utility functions in `vkcompute.hpp`. The computation setup in `main.cpp` is annotated to help beginners follow the big picture of setting up a computation.
-2. Calls out to execute a softmax computation implementated as a GPU compute shader in `softmax.glsl` (which is compiled to an SPIR-V artifact `build/softmax.spv`. 
+2. The `main.cpp` program calls out to execute a softmax computation implementated as a GPU compute shader in `softmax.glsl` (which is compiled to an SPIR-V artifact `build/softmax.spv`. 
 3. After the computation is finished, `main.cpp` copies the output back to the host and prints the result.
 
 Build dependencies are managed by conan and the build itself is defined using cmake (`CMakeLists.txt`. The `Makefile` has a few convenient aliases for building and running.
