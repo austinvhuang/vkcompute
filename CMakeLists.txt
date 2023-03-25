@@ -16,3 +16,15 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
 target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
+
+# Experimental
+
+add_executable(xp src/experimental.cpp)
+
+target_include_directories(xp PRIVATE src)
+
+set_property(TARGET xp PROPERTY CXX_STANDARD 17)
+
+target_link_libraries(xp PRIVATE fmt::fmt)
+target_link_libraries(xp PRIVATE spdlog::spdlog)
+target_link_libraries(xp PRIVATE Vulkan::Vulkan)

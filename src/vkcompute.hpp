@@ -210,7 +210,8 @@ VkDevice create_logical_device(VkPhysicalDevice &physical_device,
   return device;
 }
 
-VkBuffer create_buffer(int size, VkDevice &device, VkBufferUsageFlags usage) {
+VkBuffer create_buffer(int size, const VkDevice &device,
+                       VkBufferUsageFlags usage) {
   VkBufferCreateInfo buffer_create_info{};
   buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   buffer_create_info.size = sizeof(float) * size;
@@ -253,8 +254,8 @@ std::optional<uint32_t> query_memory_type(VkPhysicalDevice &physicalDevice) {
   return std::nullopt;
 }
 
-VkDeviceMemory bind_buffer(VkDevice &device, VkBuffer &buffer, int memory_type,
-                           int size) {
+VkDeviceMemory bind_buffer(const VkDevice &device, VkBuffer &buffer,
+                           int memory_type, int size) {
   VkMemoryRequirements memory_requirements;
   vkGetBufferMemoryRequirements(device, buffer, &memory_requirements);
 
@@ -294,6 +295,26 @@ void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
   vkUnmapMemory(device, memory);
   spdlog::info("Memory copied successfully");
 }
+
+/**
+ * @brief A struct to hold GPU buffers, memory, and bufferinfos
+ * @tparam size
+ */
+template <size_t size> struct GPUBuffers {
+  GPUBuffers(size_t memory_type) : memory_type(memory_type), index(0) {}
+  std::array<VkBuffer, size> buffers;
+  std::array<VkDeviceMemory, size> memories;
+  std::array<VkDescriptorBufferInfo, size> bufferinfos;
+  uint32_t memory_type;
+  uint32_t index;
+  void insert(VkBuffer buffer, VkDeviceMemory memory,
+              VkDescriptorBufferInfo bufferinfo) {
+    buffers[index] = buffer;
+    memories[index] = memory;
+    bufferinfos[index] = bufferinfo;
+    index++;
+  }
+};
 
 VkShaderModule create_shader_module(VkDevice &device,
                                     const std::string &shader_file) {
@@ -504,6 +525,52 @@ create_descriptor_set(VkDevice &device, VkDescriptorPool &pool,
   check(result, "Descriptor set allocation.");
 
   return descriptorSet;
+}
+
+/**
+ * @brief Allocate a buffer on the GPU
+ *
+ * @tparam n_bindings
+ * @param device
+ * @param size
+ * @param flags
+ * @param buffers
+ */
+template <size_t n_bindings>
+void gpu_alloc(const VkDevice &device, size_t size, VkBufferUsageFlags flags,
+               GPUBuffers<n_bindings> &buffers) {
+  VkBuffer buffer = vkc::create_buffer(size, device, flags);
+  VkDeviceMemory memory =
+      vkc::bind_buffer(device, buffer, buffers.memory_type, size);
+  VkDescriptorBufferInfo bufferinfo_in =
+      vkc::create_descriptor_buffer_info(buffer);
+  VkDescriptorBufferInfo bufferinfo =
+      vkc::create_descriptor_buffer_info(buffer);
+  buffers.insert(buffer, memory, bufferinfo);
+}
+
+/**
+ * @brief Create a descriptor set
+ * @tparam n_bindings
+ * @param device
+ * @param buffers
+ */
+template <size_t n_bindings>
+void create_descriptor_sets(VkDevice &device, GPUBuffers<n_bindings> &buffers) {
+  VkDescriptorSetLayout descriptor_set_layout =
+      vkc::create_descriptor_set_layout<n_bindings>(device);
+  std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts = {
+      descriptor_set_layout};
+  VkDescriptorPool descriptor_pool = vkc::create_descriptor_pool(device);
+  VkDescriptorSet descriptor_set = vkc::create_descriptor_set(
+      device, descriptor_pool, descriptor_set_layouts);
+  std::array<VkWriteDescriptorSet, n_bindings> descriptorWrites =
+      vkc::create_descriptor_writes<n_bindings>(descriptor_set);
+  for (size_t i = 0; i < n_bindings; i++) {
+    descriptorWrites[i].pBufferInfo = &buffers.bufferinfos[i];
+  }
+  vkUpdateDescriptorSets(device, n_bindings, descriptorWrites.data(), 0,
+                         nullptr);
 }
 
 VkCommandPool create_command_pool(VkDevice &device, uint32_t queueFamilyIndex) {

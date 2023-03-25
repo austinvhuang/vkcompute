@@ -53,3 +53,21 @@ clean: .PHONY
 
 clformat:
 	clang-format -i src/*.cpp src/*.hpp
+
+###############################################################################
+# Experimental Features
+###############################################################################
+
+
+build/dot.spv: .PHONY
+	@if ! which glslc >/dev/null; then \
+			echo "Error: glslc not found in PATH. It can be obtained as part of the glslang install."; \
+			exit 1; \
+	fi
+	glslc -fshader-stage=compute src/dot.glsl -o build/dot.spv
+
+xp-watch-shaders:
+	rg --files | entr -s "mkdir -p ./build && make build/dot.spv && echo 'Compiled shader'"
+
+xp-watch-osx: .PHONY build/dot.spv
+	rg -t cpp -t txt --files | entr -s "clang-format -i src/*.cpp src/*.hpp && make build-osx && ./build/xp"
