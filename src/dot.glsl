@@ -36,7 +36,6 @@ void main() {
       sum += products[index + i];
     }
     buffer_out.data[workgroup_idx] = sum;
-    // buffer_out.data[workgroup_idx] = -1.0;
   }
 
 }

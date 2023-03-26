@@ -60,7 +60,6 @@ create_dot_pipeline(VkDevice &device, size_t size, size_t nbatch,
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           pipeline_resource.pipeline_layout, 0, 1,
                           &descriptor_set, 0, nullptr);
-
   vkCmdDispatch(command_buffer, size / workgroup_size[0], 1, 1);
   result = vkEndCommandBuffer(command_buffer);
   vkc::check(result, "End recording command buffer.");
