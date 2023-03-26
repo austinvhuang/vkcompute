@@ -303,14 +303,14 @@ void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
 template <size_t size> struct GPUBuffers {
   GPUBuffers(size_t memory_type) : memory_type(memory_type), index(0) {}
   std::array<VkBuffer, size> buffers;
-  std::array<VkDeviceMemory, size> memories;
+  std::array<VkDeviceMemory, size> memory;
   std::array<VkDescriptorBufferInfo, size> bufferinfos;
   uint32_t memory_type;
   uint32_t index;
-  void insert(VkBuffer buffer, VkDeviceMemory memory,
+  void insert(VkBuffer buffer, VkDeviceMemory mem,
               VkDescriptorBufferInfo bufferinfo) {
     buffers[index] = buffer;
-    memories[index] = memory;
+    memory[index] = mem;
     bufferinfos[index] = bufferinfo;
     index++;
   }
@@ -550,13 +550,15 @@ void gpu_alloc(const VkDevice &device, size_t size, VkBufferUsageFlags flags,
 }
 
 /**
- * @brief Create a descriptor set
+ * @brief Create a descriptor set, updates device with descriptor writes
+ * information.
  * @tparam n_bindings
  * @param device
  * @param buffers
  */
 template <size_t n_bindings>
-void create_descriptor_sets(VkDevice &device, GPUBuffers<n_bindings> &buffers) {
+VkDescriptorSet create_descriptor_sets(VkDevice &device,
+                                       GPUBuffers<n_bindings> &buffers) {
   VkDescriptorSetLayout descriptor_set_layout =
       vkc::create_descriptor_set_layout<n_bindings>(device);
   std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts = {
@@ -571,6 +573,7 @@ void create_descriptor_sets(VkDevice &device, GPUBuffers<n_bindings> &buffers) {
   }
   vkUpdateDescriptorSets(device, n_bindings, descriptorWrites.data(), 0,
                          nullptr);
+  return descriptor_set;
 }
 
 VkCommandPool create_command_pool(VkDevice &device, uint32_t queueFamilyIndex) {

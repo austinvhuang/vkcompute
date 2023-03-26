@@ -2,36 +2,40 @@
 
 layout (local_size_x_id = 0, local_size_y_id = 1, local_size_z_id = 2) in;
 
-layout(std430, binding = 1) buffer InA {
+layout(std430, binding = 0) buffer InA {
   float data[];
 } buffer_a;
 
-layout(std430, binding = 2) buffer InB {
+layout(std430, binding = 1) buffer InB {
   float data[];
 } buffer_b;
 
-layout(std430, binding = 3) buffer Out {
+layout(std430, binding = 2) buffer Out {
   float data[];
 } buffer_out;
+
+shared float products[2048]; // TODO - make this size dynamic and based on the input buffer size
 
 void main() {
 
   const uint index = gl_GlobalInvocationID.x;
+  const uint workgroup_idx = gl_WorkGroupID.x;
+  const uint batch_size = gl_WorkGroupSize.x; // 1 batch = 1 workgroup
   const uint num_work_items = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
+  const uint local_idx = gl_LocalInvocationID.x;
 
-  // compute dot product
-  buffer_out.data[index] = buffer_a.data[index] * buffer_b.data[index];
+  // zip product
+  products[index] = buffer_a.data[index] * buffer_b.data[index];
 
-  // wait for all threads to finish
   barrier();
 
-  if (index == 0) {
-    // compute sum
+  // sum for each workgroup (batch)
+  if (local_idx == 0) {
     float sum = 0.0;
-    for (uint i = 0; i < num_work_items; i++) {
-      sum += buffer_out.data[i];
+    for (uint i = 0; i < batch_size; i++) {
+      sum += products[index + i];
     }
-    buffer_out.data[0] = sum;
+    buffer_out.data[workgroup_idx] = sum;
   }
 
 }
