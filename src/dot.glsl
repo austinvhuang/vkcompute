@@ -24,11 +24,11 @@ void main() {
   const uint num_work_items = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
   const uint local_idx = gl_LocalInvocationID.x;
 
-  // zip product
   products[index] = buffer_a.data[index] * buffer_b.data[index];
 
   barrier();
 
+  // zip product
   // sum for each workgroup (batch)
   if (local_idx == 0) {
     float sum = 0.0;
@@ -36,6 +36,7 @@ void main() {
       sum += products[index + i];
     }
     buffer_out.data[workgroup_idx] = sum;
+    // buffer_out.data[workgroup_idx] = -1.0;
   }
 
 }

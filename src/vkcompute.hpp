@@ -300,8 +300,8 @@ void copy_to_gpu(const VkDevice &device, VkDeviceMemory &memory,
  * @brief A struct to hold GPU buffers, memory, and bufferinfos
  * @tparam size
  */
-template <size_t size> struct GPUBuffers {
-  GPUBuffers(size_t memory_type) : memory_type(memory_type), index(0) {}
+template <size_t size> struct BufferResource {
+  BufferResource(size_t memory_type) : memory_type(memory_type), index(0) {}
   std::array<VkBuffer, size> buffers;
   std::array<VkDeviceMemory, size> memory;
   std::array<VkDescriptorBufferInfo, size> bufferinfos;
@@ -314,6 +314,12 @@ template <size_t size> struct GPUBuffers {
     bufferinfos[index] = bufferinfo;
     index++;
   }
+};
+
+struct PipelineResource {
+  VkPipelineLayout pipeline_layout;
+  VkPipeline pipeline;
+  VkCommandBuffer command_buffer;
 };
 
 VkShaderModule create_shader_module(VkDevice &device,
@@ -538,7 +544,7 @@ create_descriptor_set(VkDevice &device, VkDescriptorPool &pool,
  */
 template <size_t n_bindings>
 void gpu_alloc(const VkDevice &device, size_t size, VkBufferUsageFlags flags,
-               GPUBuffers<n_bindings> &buffers) {
+               BufferResource<n_bindings> &buffers) {
   VkBuffer buffer = vkc::create_buffer(size, device, flags);
   VkDeviceMemory memory =
       vkc::bind_buffer(device, buffer, buffers.memory_type, size);
@@ -558,7 +564,7 @@ void gpu_alloc(const VkDevice &device, size_t size, VkBufferUsageFlags flags,
  */
 template <size_t n_bindings>
 VkDescriptorSet create_descriptor_sets(VkDevice &device,
-                                       GPUBuffers<n_bindings> &buffers) {
+                                       BufferResource<n_bindings> &buffers) {
   VkDescriptorSetLayout descriptor_set_layout =
       vkc::create_descriptor_set_layout<n_bindings>(device);
   std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts = {

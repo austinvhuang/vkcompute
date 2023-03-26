@@ -71,3 +71,6 @@ xp-watch-shaders:
 
 xp-watch-osx: .PHONY build/dot.spv
 	rg -t cpp -t txt --files | entr -s "clang-format -i src/*.cpp src/*.hpp && make build-osx && ./build/xp"
+
+watch-format:
+	rg -t cpp -t txt --files | entr -s "clang-format -i src/*.cpp src/*.hpp"

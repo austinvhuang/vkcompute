@@ -18,9 +18,54 @@ void setup_logging() {
   spdlog::flush_every(std::chrono::seconds(3));
 }
 
-template <size_t size>
-std::array<float, size> dot(std::array<float, size> &a,
-                            std::array<float, size> &b, int32_t vec_dim) {}
+std::pair<vkc::BufferResource<3>, vkc::PipelineResource>
+create_dot_pipeline(VkDevice &device, size_t size, size_t nbatch,
+                    uint32_t memory_type, size_t qfidx) {
+  constexpr size_t n_bindings = 3;
+  vkc::BufferResource<n_bindings> buffers{memory_type};
+  vkc::gpu_alloc<n_bindings>(device, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                             buffers);
+  vkc::gpu_alloc<n_bindings>(device, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                             buffers);
+  vkc::gpu_alloc<n_bindings>(device, nbatch,
+                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                 VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                             buffers);
+  VkShaderModule shader = vkc::create_shader_module(device, "build/dot.spv");
+  uint32_t wgsize = size / nbatch;
+  spdlog::info("Workgroup Size: {}", wgsize);
+  std::array<uint32_t, 3> workgroup_size = {wgsize, 1, 1};
+  vkc::PipelineResource pipeline_resource{};
+  pipeline_resource.pipeline_layout =
+      vkc::create_pipeline_layout<n_bindings>(device);
+  pipeline_resource.pipeline = vkc::create_pipeline(
+      device, pipeline_resource.pipeline_layout, shader, workgroup_size);
+  VkCommandPool command_pool = vkc::create_command_pool(device, qfidx);
+  VkCommandBuffer command_buffer =
+      vkc::create_command_buffer(device, command_pool);
+  pipeline_resource.command_buffer = command_buffer;
+  VkCommandBufferBeginInfo beginInfo = {};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  beginInfo.flags =
+      VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; // Allow command buffer
+                                                    // to be executed
+                                                    // multiple times
+  VkResult result = vkBeginCommandBuffer(command_buffer, &beginInfo);
+  vkc::check(result, "Begin recording command buffer.");
+  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    pipeline_resource.pipeline);
+  VkDescriptorSet descriptor_set =
+      vkc::create_descriptor_sets<n_bindings>(device, buffers);
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          pipeline_resource.pipeline_layout, 0, 1,
+                          &descriptor_set, 0, nullptr);
+
+  vkCmdDispatch(command_buffer, size / workgroup_size[0], 1, 1);
+  result = vkEndCommandBuffer(command_buffer);
+  vkc::check(result, "End recording command buffer.");
+  return std::make_pair(buffers, pipeline_resource);
+}
 
 int main() {
   setup_logging();
@@ -42,8 +87,11 @@ int main() {
   VkDevice device = vkc::create_logical_device(physical_device, qfidx);
 
   constexpr size_t size = 1024;
-  const size_t batch_size = 64;
+  // const size_t batch_size = 4;
+  constexpr size_t batch_size = 8;
   const size_t vec_dim = size / batch_size;
+  spdlog::info("Total size: {}", size);
+  spdlog::info("# Computations in a batch (single dispatch): {}", batch_size);
   spdlog::info("Vector size: {}", vec_dim);
   std::array<float, size> input_a{};
   std::array<float, size> input_b{};
@@ -54,70 +102,31 @@ int main() {
     input_b[i] = 1.0f;
   }
 
-  constexpr size_t n_bindings = 3;
   auto memory_type = vkc::query_memory_type(physical_device);
   if (!memory_type) {
     spdlog::error("Failed to find memory type");
     std::runtime_error("Failed to find memory type");
   }
-  vkc::GPUBuffers<n_bindings> buffers{memory_type.value()};
 
-  vkc::gpu_alloc<n_bindings>(device, input_a.size(),
-                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, buffers);
-  vkc::gpu_alloc<n_bindings>(device, input_b.size(),
-                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, buffers);
-  vkc::gpu_alloc<n_bindings>(device, output.size(),
-                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                 VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                             buffers);
-  vkc::copy_to_gpu<size>(device, buffers.memory[0], input_a);
-  vkc::copy_to_gpu<size>(device, buffers.memory[1], input_b);
-  VkPipelineLayout pipeline_layout =
-      vkc::create_pipeline_layout<n_bindings>(device);
-  VkDescriptorSet descriptor_set =
-      vkc::create_descriptor_sets<n_bindings>(device, buffers);
-  spdlog::info("Created descriptor set.");
+  auto [buffers, pipeline_resources] =
+      create_dot_pipeline(device, size, batch_size, memory_type.value(), qfidx);
 
-  // uint32_t wgsize = static_cast<uint32_t>(output.size());
-  uint32_t wgsize = vec_dim;
-  std::array<uint32_t, 3> workgroup_size = {wgsize, 1, 1};
-  VkShaderModule shader = vkc::create_shader_module(device, "build/dot.spv");
-  VkPipeline pipeline =
-      vkc::create_pipeline(device, pipeline_layout, shader, workgroup_size);
-
-  VkCommandPool command_pool = vkc::create_command_pool(device, qfidx);
-  VkCommandBuffer command_buffer =
-      vkc::create_command_buffer(device, command_pool);
-
-  VkCommandBufferBeginInfo beginInfo = {};
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo.flags =
-      VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; // Allow command buffer
-                                                    // to be executed
-                                                    // multiple times
-  VkResult result = vkBeginCommandBuffer(command_buffer, &beginInfo);
-  vkc::check(result, "Begin command buffer.");
-
-  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                          pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
-  spdlog::info("Dispatching N workgroups: {}", size / workgroup_size[0]);
-  vkCmdDispatch(command_buffer, size / workgroup_size[0], 1, 1);
-
-  result = vkEndCommandBuffer(command_buffer);
-  vkc::check(result, "End command buffer.");
+  auto pipeline_layout = pipeline_resources.pipeline_layout;
+  auto pipeline = pipeline_resources.pipeline;
 
   VkQueue queue;
   const uint32_t queue_index = 0;
   vkGetDeviceQueue(device, qfidx, queue_index, &queue);
 
+  VkResult result{};
   std::string input = "";
   while (input != "q") {
+    vkc::copy_to_gpu<size>(device, buffers.memory[0], input_a);
+    vkc::copy_to_gpu<size>(device, buffers.memory[1], input_b);
     const VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
-        .pCommandBuffers = &command_buffer,
+        .pCommandBuffers = &pipeline_resources.command_buffer,
     };
     result = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
     vkc::check(result, "Submit command buffer.");
@@ -128,11 +137,14 @@ int main() {
     // Print input and output to the screen
     vkc::copy_to_cpu<batch_size>(device, buffers.memory[2], output);
     int idx = 0;
-    /*
     spdlog::info("Input A: ");
     idx = 0;
     for (auto &x : input_a) {
       spdlog::info("{} : {}", idx, x);
+      if (idx > 10) {
+        spdlog::info(" ... ");
+        break;
+      }
       idx++;
     }
     spdlog::info("Input B: ");
@@ -140,9 +152,12 @@ int main() {
     idx = 0;
     for (auto &x : input_b) {
       spdlog::info("{} : {}", idx, x);
+      if (idx > 10) {
+        spdlog::info(" ... ");
+        break;
+      }
       idx++;
     }
-    */
     spdlog::info("Output: ");
     idx = 0;
     for (auto &x : output) {
