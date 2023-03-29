@@ -18,22 +18,26 @@ void setup_logging() {
   spdlog::flush_every(std::chrono::seconds(3));
 }
 
+/**
+ * @brief Create a binary operation pipeline
+ */
 std::pair<vkc::BufferResource<3>, vkc::PipelineResource>
-create_dot_pipeline(VkDevice &device, size_t size, size_t nbatch,
-                    uint32_t memory_type, size_t qfidx) {
+create_binary_op_pipeline(VkDevice &device, size_t size1, size_t size2,
+                          size_t size_out, uint32_t wgsize,
+                          uint32_t n_workgroups, uint32_t memory_type,
+                          size_t qfidx, std::string shader_path) {
   constexpr size_t n_bindings = 3;
   vkc::BufferResource<n_bindings> buffers{memory_type};
-  vkc::gpu_alloc<n_bindings>(device, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  vkc::gpu_alloc<n_bindings>(device, size1, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                              buffers);
-  vkc::gpu_alloc<n_bindings>(device, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  vkc::gpu_alloc<n_bindings>(device, size2, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                              buffers);
-  vkc::gpu_alloc<n_bindings>(device, nbatch,
+  vkc::gpu_alloc<n_bindings>(device, size_out,
                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                              buffers);
-  VkShaderModule shader = vkc::create_shader_module(device, "build/dot.spv");
-  uint32_t wgsize = size / nbatch;
+  VkShaderModule shader = vkc::create_shader_module(device, shader_path);
   spdlog::info("Workgroup Size: {}", wgsize);
   std::array<uint32_t, 3> workgroup_size = {wgsize, 1, 1};
   vkc::PipelineResource pipeline_resource{};
@@ -60,7 +64,7 @@ create_dot_pipeline(VkDevice &device, size_t size, size_t nbatch,
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           pipeline_resource.pipeline_layout, 0, 1,
                           &descriptor_set, 0, nullptr);
-  vkCmdDispatch(command_buffer, size / workgroup_size[0], 1, 1);
+  vkCmdDispatch(command_buffer, n_workgroups, 1, 1);
   result = vkEndCommandBuffer(command_buffer);
   vkc::check(result, "End recording command buffer.");
   return std::make_pair(buffers, pipeline_resource);
@@ -107,8 +111,18 @@ int main() {
     std::runtime_error("Failed to find memory type");
   }
 
-  auto [buffers, pipeline_resources] =
-      create_dot_pipeline(device, size, batch_size, memory_type.value(), qfidx);
+  const uint32_t wgsize =
+      size /
+      batch_size; // size of a workgroup is the vector size which is the total
+                  // length divided by the # of vectors in a batch (batch size)
+
+  const uint32_t n_workgroups =
+      size / wgsize; // # of workgroups is the total length divided by the
+                     // workgroup size
+
+  auto [buffers, pipeline_resources] = create_binary_op_pipeline(
+      device, size, size, batch_size, wgsize, n_workgroups, memory_type.value(),
+      qfidx, "build/dot.spv");
 
   auto pipeline_layout = pipeline_resources.pipeline_layout;
   auto pipeline = pipeline_resources.pipeline;
